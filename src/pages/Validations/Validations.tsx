@@ -1,24 +1,38 @@
-import { useState } from "react";
-import { mockValidations } from "@/data/mock";
+import type { ProfessionalValidation } from "@/data/mock";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, FileText } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Check, X, FileText, Loader2 } from "lucide-react";
+import type { UseMutationResult } from "@tanstack/react-query";
 
-export default function Validations() {
-  const [validations, setValidations] = useState(mockValidations);
-  const { toast } = useToast();
+export interface ValidationsProps {
+  validations: ProfessionalValidation[];
+  isLoading: boolean;
+  error: Error | null;
+  updateStatusMutation: UseMutationResult<void, Error, { id: string; status: "aprovado" | "rejeitado" }, unknown>;
+}
 
-  const approve = (id: string) => {
-    setValidations((v) => v.map((val) => val.id === id ? { ...val, status: "aprovado" as const } : val));
-    toast({ title: "Profissional aprovado" });
-  };
+export function Validations({
+  validations,
+  isLoading,
+  error,
+  updateStatusMutation,
+}: ValidationsProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
-  const reject = (id: string) => {
-    setValidations((v) => v.map((val) => val.id === id ? { ...val, status: "rejeitado" as const } : val));
-    toast({ title: "Profissional rejeitado" });
-  };
+  if (error) {
+    return (
+      <div className="text-center py-12 text-destructive">
+        Erro ao carregar validações. Tente novamente.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -45,10 +59,21 @@ export default function Validations() {
               <div className="flex items-center gap-2 ml-4">
                 {val.status === "pendente" ? (
                   <>
-                    <Button size="sm" className="bg-success hover:bg-success/90 text-success-foreground" onClick={() => approve(val.id)}>
+                    <Button
+                      size="sm"
+                      className="bg-success hover:bg-success/90 text-success-foreground"
+                      onClick={() => updateStatusMutation.mutate({ id: val.id, status: "aprovado" })}
+                      disabled={updateStatusMutation.isPending}
+                    >
                       <Check className="h-4 w-4 mr-1" /> Aprovar
                     </Button>
-                    <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => reject(val.id)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => updateStatusMutation.mutate({ id: val.id, status: "rejeitado" })}
+                      disabled={updateStatusMutation.isPending}
+                    >
                       <X className="h-4 w-4 mr-1" /> Rejeitar
                     </Button>
                   </>

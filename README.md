@@ -1,73 +1,60 @@
-# Welcome to your Lovable project
+# CFFC Admin Hub
 
-## Project info
+Painel de administração para gestão de denúncias, vídeos em análise, validação de profissionais e utilizadores.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Funcionalidades
 
-## How can I edit this code?
+- **Login** — Acesso restrito (mock; qualquer email/senha para desenvolvimento).
+- **Denúncias** — Listagem e gestão de denúncias de conteúdo e perfis (remover conteúdo, remover denúncia, bloquear utilizador).
+- **Vídeos em Análise** — Aprovar ou rejeitar vídeos enviados por atletas.
+- **Validação de Profissionais** — Aprovar ou rejeitar pedidos de validação de profissionais (documentos, CRM/CREF, etc.).
+- **Gestão de Utilizadores** — Listar utilizadores, bloquear/desbloquear, remover validação, criar administradores.
 
-There are several ways of editing your application.
+## Stack
 
-**Use Lovable**
+- **Runtime / build:** Vite, React 18, TypeScript
+- **UI:** shadcn/ui, Tailwind CSS, Radix UI
+- **Estado:** Zustand (estado global), TanStack Query v5 (estado de servidor / listagens)
+- **Roteamento:** React Router v6
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Pré-requisitos
 
-Changes made via Lovable will be committed automatically to this repo.
+- [Bun](https://bun.sh) (recomendado) ou Node.js 18+
 
-**Use your preferred IDE**
+## Como rodar
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Instalar dependências
+bun install
+# ou: npm install
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Servidor de desenvolvimento (porta 8080)
+bun run dev
+# ou: npm run dev
 
-Follow these steps:
+# Build de produção
+bun run build
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+# Pré-visualizar build
+bun run preview
 ```
 
-**Edit a file directly in GitHub**
+## Estrutura do projeto
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- `src/pages/` — Páginas da aplicação (Container/Presentational por pasta).
+- `src/components/` — Componentes reutilizáveis e UI (shadcn).
+- `src/stores/` — Stores Zustand (ex.: auth).
+- `src/lib/` — Utilitários, queryClient, queryKeys.
+- `src/data/` — Dados mock e funções de fetch simuladas (para substituir por API no futuro).
+- `src/layouts/` — Layouts (ex.: AdminLayout com sidebar).
+- `src/hooks/` — Hooks partilhados.
 
-**Use GitHub Codespaces**
+## Scripts
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+| Script        | Descrição                    |
+| ------------- | ---------------------------- |
+| `bun run dev` | Servidor de desenvolvimento  |
+| `bun run build` | Build de produção         |
+| `bun run build:dev` | Build em modo development |
+| `bun run preview` | Servir build localmente   |
+| `bun run lint` | Executar ESLint            |

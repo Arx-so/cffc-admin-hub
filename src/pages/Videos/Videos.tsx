@@ -1,27 +1,40 @@
-import { useState } from "react";
-import { mockPendingVideos } from "@/data/mock";
+import type { PendingVideo } from "@/data/mock";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Check, X, Loader2 } from "lucide-react";
+import type { UseMutationResult } from "@tanstack/react-query";
 
-export default function Videos() {
-  const [videos, setVideos] = useState(mockPendingVideos);
-  const { toast } = useToast();
+export interface VideosProps {
+  pending: PendingVideo[];
+  resolved: PendingVideo[];
+  isLoading: boolean;
+  error: Error | null;
+  updateVideoStatusMutation: UseMutationResult<void, Error, { id: string; status: "aprovado" | "rejeitado" }, unknown>;
+}
 
-  const approve = (id: string) => {
-    setVideos((v) => v.map((vid) => vid.id === id ? { ...vid, status: "aprovado" as const } : vid));
-    toast({ title: "Vídeo aprovado" });
-  };
+export function Videos({
+  pending,
+  resolved,
+  isLoading,
+  error,
+  updateVideoStatusMutation,
+}: VideosProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
-  const reject = (id: string) => {
-    setVideos((v) => v.map((vid) => vid.id === id ? { ...vid, status: "rejeitado" as const } : vid));
-    toast({ title: "Vídeo rejeitado" });
-  };
-
-  const pending = videos.filter((v) => v.status === "pendente");
-  const resolved = videos.filter((v) => v.status !== "pendente");
+  if (error) {
+    return (
+      <div className="text-center py-12 text-destructive">
+        Erro ao carregar vídeos. Tente novamente.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -46,10 +59,21 @@ export default function Videos() {
                 <p className="text-sm text-muted-foreground">{video.athleteName} · {video.uploadedAt}</p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => approve(video.id)}>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
+                  onClick={() => updateVideoStatusMutation.mutate({ id: video.id, status: "aprovado" })}
+                  disabled={updateVideoStatusMutation.isPending}
+                >
                   <Check className="h-4 w-4 mr-1" /> Aprovar
                 </Button>
-                <Button size="sm" variant="outline" className="flex-1 text-destructive hover:bg-destructive/10" onClick={() => reject(video.id)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 text-destructive hover:bg-destructive/10"
+                  onClick={() => updateVideoStatusMutation.mutate({ id: video.id, status: "rejeitado" })}
+                  disabled={updateVideoStatusMutation.isPending}
+                >
                   <X className="h-4 w-4 mr-1" /> Rejeitar
                 </Button>
               </div>

@@ -1,10 +1,9 @@
-import { useState } from "react";
-import { mockReports, Report } from "@/data/mock";
+import type { Report } from "@/data/mock";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, Ban, XCircle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Trash2, Ban, XCircle, Loader2 } from "lucide-react";
+import type { UseMutationResult } from "@tanstack/react-query";
 
 const statusColors: Record<Report["status"], string> = {
   pendente: "bg-warning/15 text-warning border-warning/30",
@@ -18,23 +17,38 @@ const typeLabels: Record<Report["type"], string> = {
   validação: "Validação",
 };
 
-export default function Reports() {
-  const [reports, setReports] = useState(mockReports);
-  const { toast } = useToast();
+export interface ReportsProps {
+  reports: Report[];
+  isLoading: boolean;
+  error: Error | null;
+  removeContentMutation: UseMutationResult<void, Error, string, unknown>;
+  removeReportMutation: UseMutationResult<void, Error, string, unknown>;
+  blockUser: (name: string) => void;
+}
 
-  const removeContent = (id: string) => {
-    setReports((r) => r.map((rep) => rep.id === id ? { ...rep, status: "resolvido" as const } : rep));
-    toast({ title: "Conteúdo removido" });
-  };
+export function Reports({
+  reports,
+  isLoading,
+  error,
+  removeContentMutation,
+  removeReportMutation,
+  blockUser,
+}: ReportsProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
-  const removeReport = (id: string) => {
-    setReports((r) => r.filter((rep) => rep.id !== id));
-    toast({ title: "Denúncia removida" });
-  };
-
-  const blockUser = (name: string) => {
-    toast({ title: `Usuário ${name} bloqueado` });
-  };
+  if (error) {
+    return (
+      <div className="text-center py-12 text-destructive">
+        Erro ao carregar denúncias. Tente novamente.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -59,10 +73,22 @@ export default function Reports() {
               </div>
 
               <div className="flex items-center gap-2 ml-4">
-                <Button size="sm" variant="outline" onClick={() => removeContent(report.id)} title="Remover conteúdo">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => removeContentMutation.mutate(report.id)}
+                  disabled={removeContentMutation.isPending}
+                  title="Remover conteúdo"
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => removeReport(report.id)} title="Remover denúncia">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => removeReportMutation.mutate(report.id)}
+                  disabled={removeReportMutation.isPending}
+                  title="Remover denúncia"
+                >
                   <XCircle className="h-4 w-4" />
                 </Button>
                 <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => blockUser(report.reportedUser)} title="Bloquear usuário">

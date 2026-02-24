@@ -66,3 +66,25 @@ export const mockUsers: AppUser[] = [
   { id: "5", name: "Admin Master", email: "admin@app.com", role: "admin", status: "ativo", createdAt: "2025-12-01", validated: true },
   { id: "6", name: "Maria Lima", email: "maria@email.com", role: "athlete", status: "ativo", createdAt: "2026-02-05", validated: true },
 ];
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function fetchReports(): Promise<Report[]> {
+  await delay(400);
+  return [...mockReports];
+}
+
+export async function fetchPendingVideos(): Promise<PendingVideo[]> {
+  await delay(400);
+  return [...mockPendingVideos];
+}
+
+export async function fetchValidations(): Promise<ProfessionalValidation[]> {
+  await delay(400);
+  return [...mockValidations];
+}
+
+export async function fetchUsers(): Promise<AppUser[]> {
+  await delay(400);
+  return [...mockUsers];
+}

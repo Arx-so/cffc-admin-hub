@@ -1,14 +1,13 @@
-import { useState } from "react";
-import { mockUsers, AppUser } from "@/data/mock";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { AppUser } from "@/data/mock";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Ban, ShieldCheck, ShieldOff, Eye, UserPlus, Search } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Ban, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2 } from "lucide-react";
+import type { UseMutationResult } from "@tanstack/react-query";
 
 const roleLabels: Record<AppUser["role"], string> = {
   user: "Usuário",
@@ -17,46 +16,54 @@ const roleLabels: Record<AppUser["role"], string> = {
   admin: "Admin",
 };
 
-export default function UserManagement() {
-  const [users, setUsers] = useState(mockUsers);
-  const [search, setSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const { toast } = useToast();
+export interface UserManagementProps {
+  filtered: AppUser[];
+  isLoading: boolean;
+  error: Error | null;
+  search: string;
+  setSearch: (v: string) => void;
+  selectedUser: AppUser | null;
+  setSelectedUser: (u: AppUser | null) => void;
+  newAdminEmail: string;
+  setNewAdminEmail: (v: string) => void;
+  toggleBlockMutation: UseMutationResult<void, Error, string, unknown>;
+  removeValidationMutation: UseMutationResult<void, Error, string, unknown>;
+  addValidationMutation: UseMutationResult<void, Error, string, unknown>;
+  createAdminMutation: UseMutationResult<void, Error, string, unknown>;
+  createAdmin: () => void;
+}
 
-  const filtered = users.filter(
-    (u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const toggleBlock = (id: string) => {
-    setUsers((u) =>
-      u.map((user) =>
-        user.id === id ? { ...user, status: user.status === "ativo" ? "bloqueado" as const : "ativo" as const } : user
-      )
+export function UserManagement({
+  filtered,
+  isLoading,
+  error,
+  search,
+  setSearch,
+  selectedUser,
+  setSelectedUser,
+  newAdminEmail,
+  setNewAdminEmail,
+  toggleBlockMutation,
+  removeValidationMutation,
+  addValidationMutation,
+  createAdminMutation,
+  createAdmin,
+}: UserManagementProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     );
-    toast({ title: "Status atualizado" });
-  };
+  }
 
-  const removeValidation = (id: string) => {
-    setUsers((u) => u.map((user) => user.id === id ? { ...user, validated: false } : user));
-    toast({ title: "Validação removida" });
-  };
-
-  const createAdmin = () => {
-    if (!newAdminEmail) return;
-    const newAdmin: AppUser = {
-      id: String(users.length + 1),
-      name: newAdminEmail.split("@")[0],
-      email: newAdminEmail,
-      role: "admin",
-      status: "ativo",
-      createdAt: new Date().toISOString().split("T")[0],
-      validated: true,
-    };
-    setUsers((u) => [...u, newAdmin]);
-    setNewAdminEmail("");
-    toast({ title: "Admin criado" });
-  };
+  if (error) {
+    return (
+      <div className="text-center py-12 text-destructive">
+        Erro ao carregar utilizadores. Tente novamente.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,7 +88,9 @@ export default function UserManagement() {
                 <Label>Email</Label>
                 <Input placeholder="email@admin.com" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} />
               </div>
-              <Button className="w-full" onClick={createAdmin}>Criar</Button>
+              <Button className="w-full" onClick={createAdmin} disabled={createAdminMutation.isPending}>
+                Criar
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -126,19 +135,34 @@ export default function UserManagement() {
                       <Button size="icon" variant="ghost" title="Ver histórico" onClick={() => setSelectedUser(user)}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" title={user.status === "ativo" ? "Bloquear" : "Desbloquear"} onClick={() => toggleBlock(user.id)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title={user.status === "ativo" ? "Bloquear" : "Desbloquear"}
+                        onClick={() => toggleBlockMutation.mutate(user.id)}
+                        disabled={toggleBlockMutation.isPending}
+                      >
                         <Ban className="h-4 w-4" />
                       </Button>
                       {user.validated && (
-                        <Button size="icon" variant="ghost" title="Remover validação" onClick={() => removeValidation(user.id)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Remover validação"
+                          onClick={() => removeValidationMutation.mutate(user.id)}
+                          disabled={removeValidationMutation.isPending}
+                        >
                           <ShieldOff className="h-4 w-4" />
                         </Button>
                       )}
                       {!user.validated && (
-                        <Button size="icon" variant="ghost" title="Validar conta" onClick={() => {
-                          setUsers((u) => u.map((usr) => usr.id === user.id ? { ...usr, validated: true } : usr));
-                          toast({ title: "Conta validada" });
-                        }}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Validar conta"
+                          onClick={() => addValidationMutation.mutate(user.id)}
+                          disabled={addValidationMutation.isPending}
+                        >
                           <ShieldCheck className="h-4 w-4" />
                         </Button>
                       )}
@@ -151,7 +175,6 @@ export default function UserManagement() {
         </CardContent>
       </Card>
 
-      {/* User Detail Dialog */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
         <DialogContent>
           <DialogHeader>

@@ -1,10 +1,10 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthStore } from "@/stores";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/AdminSidebar";
 
 export default function AdminLayout() {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   if (!user) return <Navigate to="/login" replace />;
 

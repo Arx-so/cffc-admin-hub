@@ -1,6 +1,6 @@
 import { AlertTriangle, Video, UserCheck, Users, LogOut, Shield } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthStore } from "@/stores";
 import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -23,7 +23,7 @@ const navItems = [
 ];
 
 export function AdminSidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
