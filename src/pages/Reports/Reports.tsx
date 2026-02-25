@@ -1,4 +1,4 @@
-import type { Report } from "@/data/mock";
+import type { Report } from "@/types/report";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,22 @@ import type { UseMutationResult } from "@tanstack/react-query";
 
 const statusColors: Record<Report["status"], string> = {
   pendente: "bg-warning/15 text-warning border-warning/30",
-  resolvido: "bg-success/15 text-success border-success/30",
+  conteudo_removido: "bg-success/15 text-success border-success/30",
+  usuario_bloqueado: "bg-success/15 text-success border-success/30",
   rejeitado: "bg-destructive/15 text-destructive border-destructive/30",
+};
+
+const statusLabels: Record<Report["status"], string> = {
+  pendente: "Pendente",
+  conteudo_removido: "Conteúdo removido",
+  usuario_bloqueado: "Usuário bloqueado",
+  rejeitado: "Rejeitado",
 };
 
 const typeLabels: Record<Report["type"], string> = {
   video: "Vídeo",
-  perfil: "Perfil",
-  validação: "Validação",
+  profile: "Perfil",
+  validation: "Validação",
 };
 
 export interface ReportsProps {
@@ -23,7 +31,7 @@ export interface ReportsProps {
   error: Error | null;
   removeContentMutation: UseMutationResult<void, Error, string, unknown>;
   removeReportMutation: UseMutationResult<void, Error, string, unknown>;
-  blockUser: (name: string) => void;
+  blockUserMutation: UseMutationResult<void, Error, string, unknown>;
 }
 
 export function Reports({
@@ -32,7 +40,7 @@ export function Reports({
   error,
   removeContentMutation,
   removeReportMutation,
-  blockUser,
+  blockUserMutation,
 }: ReportsProps) {
   if (isLoading) {
     return (
@@ -64,7 +72,7 @@ export function Reports({
               <div className="flex flex-col gap-1.5 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="text-xs font-medium">{typeLabels[report.type]}</Badge>
-                  <Badge variant="outline" className={statusColors[report.status]}>{report.status}</Badge>
+                  <Badge variant="outline" className={statusColors[report.status]}>{statusLabels[report.status]}</Badge>
                 </div>
                 <p className="font-medium">{report.reason}</p>
                 <p className="text-sm text-muted-foreground">
@@ -73,27 +81,40 @@ export function Reports({
               </div>
 
               <div className="flex items-center gap-2 ml-4">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => removeContentMutation.mutate(report.id)}
-                  disabled={removeContentMutation.isPending}
-                  title="Remover conteúdo"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => removeReportMutation.mutate(report.id)}
-                  disabled={removeReportMutation.isPending}
-                  title="Remover denúncia"
-                >
-                  <XCircle className="h-4 w-4" />
-                </Button>
-                <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => blockUser(report.reportedUser)} title="Bloquear usuário">
-                  <Ban className="h-4 w-4" />
-                </Button>
+                {report.status === "pendente" && (
+                  <>
+                    {report.type !== "profile" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeContentMutation.mutate(report.id)}
+                        disabled={removeContentMutation.isPending}
+                        title="Remover conteúdo"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => removeReportMutation.mutate(report.id)}
+                      disabled={removeReportMutation.isPending}
+                      title="Remover denúncia"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => blockUserMutation.mutate(report.id)}
+                      disabled={blockUserMutation.isPending}
+                      title="Bloquear usuário"
+                    >
+                      <Ban className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

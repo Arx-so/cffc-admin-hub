@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchReports, Report } from "@/data/mock";
+import { fetchReports, updateReportStatus, deleteReport } from "@/processes/reports";
+import type { Report } from "@/types/report";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,42 +12,41 @@ export function useReports() {
   });
   const { toast } = useToast();
 
+  const invalidateReports = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
+
   const removeContentMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<Report[]>(queryKeys.reports.all, (prev) =>
-        prev ? prev.map((rep) => (rep.id === id ? { ...rep, status: "resolvido" as const } : rep)) : []
-      );
+    mutationFn: (id: string) =>
+      updateReportStatus(id, "conteudo_removido"),
+    onSuccess: () => {
+      invalidateReports();
       toast({ title: "Conteúdo removido" });
     },
   });
 
   const removeReportMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<Report[]>(queryKeys.reports.all, (prev) =>
-        prev ? prev.filter((rep) => rep.id !== id) : []
-      );
+    mutationFn: deleteReport,
+    onSuccess: () => {
+      invalidateReports();
       toast({ title: "Denúncia removida" });
     },
   });
 
-  const blockUser = (name: string) => {
-    toast({ title: `Usuário ${name} bloqueado` });
-  };
+  const blockUserMutation = useMutation({
+    mutationFn: (id: string) =>
+      updateReportStatus(id, "usuario_bloqueado"),
+    onSuccess: () => {
+      invalidateReports();
+      toast({ title: "Usuário bloqueado" });
+    },
+  });
 
   return {
     reports,
     isLoading,
-    error,
+    error: error as Error | null,
     removeContentMutation,
     removeReportMutation,
-    blockUser,
+    blockUserMutation,
   };
 }
