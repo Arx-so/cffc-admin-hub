@@ -11,9 +11,12 @@ export interface User {
   role: UserRole;
 }
 
+const LOGIN_DATE_KEY = "cffc_admin_login_date";
+
 interface AuthState {
   user: User | null;
   isLoading: boolean;
+  isInitialized: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   setUser: (partial: Partial<Pick<User, "name" | "role">>) => void;
@@ -35,18 +38,30 @@ function userFromSession(session: Session | null): User | null {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
+  isInitialized: false,
 
   login: async (email: string, password: string): Promise<boolean> => {
     set({ isLoading: true });
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     set({ isLoading: false });
     if (error) return false;
+    const today = new Date().toDateString();
+    try {
+      localStorage.setItem(LOGIN_DATE_KEY, today);
+    } catch {
+      /* ignore */
+    }
     set({ user: userFromSession(data.session) });
     return true;
   },
 
   logout: async () => {
     await supabase.auth.signOut();
+    try {
+      localStorage.removeItem(LOGIN_DATE_KEY);
+    } catch {
+      /* ignore */
+    }
     set({ user: null });
   },
 
@@ -58,10 +73,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   initSession: async () => {
+    set({ isInitialized: false });
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    set({ user: userFromSession(session) });
+
+    const today = new Date().toDateString();
+    const savedLoginDate = (typeof localStorage !== "undefined" && localStorage.getItem(LOGIN_DATE_KEY)) || null;
+    if (session && savedLoginDate && savedLoginDate !== today) {
+      await supabase.auth.signOut();
+      if (typeof localStorage !== "undefined") localStorage.removeItem(LOGIN_DATE_KEY);
+      set({ user: null, isInitialized: true });
+    } else {
+      if (session && typeof localStorage !== "undefined" && !savedLoginDate) {
+        localStorage.setItem(LOGIN_DATE_KEY, today);
+      }
+      set({ user: userFromSession(session), isInitialized: true });
+    }
 
     supabase.auth.onAuthStateChange((_event, session) => {
       set({ user: userFromSession(session) });

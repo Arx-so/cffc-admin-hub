@@ -4,8 +4,15 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/AdminSidebar";
 
 export default function AdminLayout() {
-  const { user } = useAuthStore();
+  const { user, isInitialized } = useAuthStore();
 
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Carregando...</div>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
 
   return (
