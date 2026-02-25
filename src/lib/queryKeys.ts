@@ -1,4 +1,5 @@
 export const queryKeys = {
+  profile: (userId: string) => ["profile", userId] as const,
   reports: {
     all: ["reports"] as const,
   },
