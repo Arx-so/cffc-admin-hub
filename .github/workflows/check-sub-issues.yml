@@ -1,0 +1,68 @@
+name: Check Sub-Issues
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-sub-issues:
+    name: check-sub-issues
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      pull-requests: read
+
+    steps:
+      - name: Check all sub-issues are closed
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+
+            // Find linked issue via "Closes #N", "Fixes #N", "Resolves #N"
+            const issueMatch = body.match(/(?:closes|fixes|resolves)\s+#(\d+)/i);
+
+            if (!issueMatch) {
+              console.log('⚠️  No linked issue found in PR body. Skipping sub-issue check.');
+              console.log('Tip: Add "Closes #<issue-number>" to your PR description.');
+              return;
+            }
+
+            const issueNumber = parseInt(issueMatch[1]);
+            console.log(`🔗 Linked issue: #${issueNumber}`);
+
+            // Fetch the parent issue
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber
+            });
+
+            const issueBody = issue.body || '';
+
+            // Check for unchecked task list items: "- [ ] "
+            const uncheckedItems = issueBody.match(/- \[ \] .+/g);
+            const checkedItems = issueBody.match(/- \[x\] .+/gi);
+
+            const uncheckedCount = uncheckedItems ? uncheckedItems.length : 0;
+            const checkedCount = checkedItems ? checkedItems.length : 0;
+            const totalCount = uncheckedCount + checkedCount;
+
+            if (totalCount === 0) {
+              console.log('ℹ️  No sub-issues (task list) found in the linked issue. Skipping check.');
+              return;
+            }
+
+            console.log(`📋 Sub-issues: ${checkedCount}/${totalCount} completed`);
+
+            if (uncheckedCount > 0) {
+              console.log('\n❌ Uncompleted sub-issues:');
+              uncheckedItems.forEach(item => console.log(` ${item}`));
+              core.setFailed(
+                `${uncheckedCount} sub-issue(s) are still open. Please resolve them before merging.`
+              );
+            } else {
+              console.log('✅ All sub-issues are resolved! PR is ready to merge.');
+            }
