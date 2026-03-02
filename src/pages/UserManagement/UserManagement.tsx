@@ -1,4 +1,5 @@
-import type { AppUser } from "@/data/mock";
+import type { ProfileRow } from "./types";
+import { statusFromBannedUntil, ROLE_LABELS } from "./types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,24 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Ban, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2 } from "lucide-react";
+import { Ban, Unlock, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
-const roleLabels: Record<AppUser["role"], string> = {
-  user: "Usuário",
-  athlete: "Atleta",
-  professional: "Profissional",
-  admin: "Admin",
-};
-
 export interface UserManagementProps {
-  filtered: AppUser[];
+  rows: ProfileRow[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
   isLoading: boolean;
   error: Error | null;
   search: string;
   setSearch: (v: string) => void;
-  selectedUser: AppUser | null;
-  setSelectedUser: (u: AppUser | null) => void;
+  selectedUser: ProfileRow | null;
+  setSelectedUser: (u: ProfileRow | null) => void;
   newAdminEmail: string;
   setNewAdminEmail: (v: string) => void;
   toggleBlockMutation: UseMutationResult<void, Error, string, unknown>;
@@ -31,10 +30,18 @@ export interface UserManagementProps {
   addValidationMutation: UseMutationResult<void, Error, string, unknown>;
   createAdminMutation: UseMutationResult<void, Error, string, unknown>;
   createAdmin: () => void;
+  createAdminModalOpen: boolean;
+  setCreateAdminModalOpen: (open: boolean) => void;
+  isPlaceholderData?: boolean;
 }
 
 export function UserManagement({
-  filtered,
+  rows,
+  totalCount,
+  totalPages,
+  page,
+  setPage,
+  pageSize,
   isLoading,
   error,
   search,
@@ -48,8 +55,11 @@ export function UserManagement({
   addValidationMutation,
   createAdminMutation,
   createAdmin,
+  createAdminModalOpen,
+  setCreateAdminModalOpen,
+  isPlaceholderData,
 }: UserManagementProps) {
-  if (isLoading) {
+  if (isLoading && !isPlaceholderData) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -65,6 +75,9 @@ export function UserManagement({
     );
   }
 
+  const start = page * pageSize + 1;
+  const end = Math.min((page + 1) * pageSize, totalCount);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -73,7 +86,7 @@ export function UserManagement({
           <p className="text-muted-foreground mt-1">Gerencie contas, permissões e validações</p>
         </div>
 
-        <Dialog>
+        <Dialog open={createAdminModalOpen} onOpenChange={setCreateAdminModalOpen}>
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="h-4 w-4 mr-2" /> Criar Admin
@@ -89,7 +102,14 @@ export function UserManagement({
                 <Input placeholder="email@admin.com" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} />
               </div>
               <Button className="w-full" onClick={createAdmin} disabled={createAdminMutation.isPending}>
-                Criar
+                {createAdminMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  "Criar"
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -98,7 +118,12 @@ export function UserManagement({
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar por nome ou email..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Input
+          placeholder="Buscar por nome ou email..."
+          className="pl-10"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <Card className="border-border/50">
@@ -115,82 +140,129 @@ export function UserManagement({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                      {roleLabels[user.role]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={user.status === "ativo" ? "text-success border-success/30" : "text-destructive border-destructive/30"}>
-                      {user.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{user.validated ? "✓" : "✗"}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="icon" variant="ghost" title="Ver histórico" onClick={() => setSelectedUser(user)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        title={user.status === "ativo" ? "Bloquear" : "Desbloquear"}
-                        onClick={() => toggleBlockMutation.mutate(user.id)}
-                        disabled={toggleBlockMutation.isPending}
-                      >
-                        <Ban className="h-4 w-4" />
-                      </Button>
-                      {user.validated && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Remover validação"
-                          onClick={() => removeValidationMutation.mutate(user.id)}
-                          disabled={removeValidationMutation.isPending}
-                        >
-                          <ShieldOff className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {!user.validated && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Validar conta"
-                          onClick={() => addValidationMutation.mutate(user.id)}
-                          disabled={addValidationMutation.isPending}
-                        >
-                          <ShieldCheck className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    Nenhum utilizador encontrado.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                rows.map((user) => {
+                  const status = statusFromBannedUntil(user.banned_until);
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                          {ROLE_LABELS[user.role] ?? user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={status === "ativo" ? "text-success border-success/30" : "text-destructive border-destructive/30"}
+                        >
+                          {status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{user.validated ? "✓" : "✗"}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="icon" variant="ghost" title="Ver detalhes" onClick={() => setSelectedUser(user)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={status === "ativo" ? "Bloquear" : "Desbloquear"}
+                            onClick={() => toggleBlockMutation.mutate(user.id)}
+                            disabled={toggleBlockMutation.isPending}
+                          >
+                            {status === "ativo" ? (
+                              <Ban className="h-4 w-4" />
+                            ) : (
+                              <Unlock className="h-4 w-4" />
+                            )}
+                          </Button>
+                          {user.validated && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Remover validação"
+                              onClick={() => removeValidationMutation.mutate(user.id)}
+                              disabled={removeValidationMutation.isPending}
+                            >
+                              <ShieldOff className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {!user.validated && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Validar conta"
+                              onClick={() => addValidationMutation.mutate(user.id)}
+                              disabled={addValidationMutation.isPending}
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                {totalCount === 0 ? "0" : `${start}-${end}`} de {totalCount}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page <= 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page >= totalPages - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Histórico do Usuário</DialogTitle>
+            <DialogTitle>Detalhes do usuário</DialogTitle>
           </DialogHeader>
           {selectedUser && (
             <div className="space-y-3 pt-2">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Nome:</span> {selectedUser.name}</div>
+                <div><span className="text-muted-foreground">Nome:</span> {selectedUser.name ?? "—"}</div>
                 <div><span className="text-muted-foreground">Email:</span> {selectedUser.email}</div>
-                <div><span className="text-muted-foreground">Cargo:</span> {roleLabels[selectedUser.role]}</div>
-                <div><span className="text-muted-foreground">Status:</span> {selectedUser.status}</div>
+                <div><span className="text-muted-foreground">Cargo:</span> {ROLE_LABELS[selectedUser.role] ?? selectedUser.role}</div>
+                <div><span className="text-muted-foreground">Status:</span> {statusFromBannedUntil(selectedUser.banned_until)}</div>
                 <div><span className="text-muted-foreground">Validado:</span> {selectedUser.validated ? "Sim" : "Não"}</div>
-                <div><span className="text-muted-foreground">Criado em:</span> {selectedUser.createdAt}</div>
+                <div><span className="text-muted-foreground">Criado em:</span> {selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleDateString() : "—"}</div>
+                {selectedUser.phone && <div><span className="text-muted-foreground">Telefone:</span> {selectedUser.phone}</div>}
+                {(selectedUser.city || selectedUser.state) && (
+                  <div><span className="text-muted-foreground">Local:</span> {[selectedUser.city, selectedUser.state].filter(Boolean).join(", ") || "—"}</div>
+                )}
+                {selectedUser.birth_date && <div><span className="text-muted-foreground">Nascimento:</span> {new Date(selectedUser.birth_date).toLocaleDateString()}</div>}
               </div>
-              <p className="text-xs text-muted-foreground italic">Histórico detalhado será conectado ao backend.</p>
             </div>
           )}
         </DialogContent>
