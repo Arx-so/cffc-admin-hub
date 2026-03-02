@@ -12,5 +12,7 @@ export const queryKeys = {
   },
   users: {
     all: ["users"] as const,
+    list: (params: { page: number; pageSize: number; search: string }) =>
+      ["users", "list", params.page, params.pageSize, params.search] as const,
   },
 } as const;
