@@ -17,7 +17,7 @@ export function useReports() {
 
   const removeContentMutation = useMutation({
     mutationFn: (id: string) =>
-      updateReportStatus(id, "conteudo_removido"),
+      updateReportStatus(id, "content_removed"),
     onSuccess: () => {
       invalidateReports();
       toast({ title: "Conteúdo removido" });
@@ -34,7 +34,7 @@ export function useReports() {
 
   const blockUserMutation = useMutation({
     mutationFn: (id: string) =>
-      updateReportStatus(id, "usuario_bloqueado"),
+      updateReportStatus(id, "user_blocked"),
     onSuccess: () => {
       invalidateReports();
       toast({ title: "Usuário bloqueado" });

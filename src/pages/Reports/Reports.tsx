@@ -6,17 +6,17 @@ import { Trash2, Ban, XCircle, Loader2 } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 const statusColors: Record<Report["status"], string> = {
-  pendente: "bg-warning/15 text-warning border-warning/30",
-  conteudo_removido: "bg-success/15 text-success border-success/30",
-  usuario_bloqueado: "bg-success/15 text-success border-success/30",
-  rejeitado: "bg-destructive/15 text-destructive border-destructive/30",
+  pending: "bg-warning/15 text-warning border-warning/30",
+  content_removed: "bg-success/15 text-success border-success/30",
+  user_blocked: "bg-success/15 text-success border-success/30",
+  rejected: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 const statusLabels: Record<Report["status"], string> = {
-  pendente: "Pendente",
-  conteudo_removido: "Conteúdo removido",
-  usuario_bloqueado: "Usuário bloqueado",
-  rejeitado: "Rejeitado",
+  pending: "Pending",
+  content_removed: "Content removed",
+  user_blocked: "User blocked",
+  rejected: "Rejected",
 };
 
 const typeLabels: Record<Report["type"], string> = {
@@ -81,7 +81,7 @@ export function Reports({
               </div>
 
               <div className="flex items-center gap-2 ml-4">
-                {report.status === "pendente" && (
+                {report.status === "pending" && (
                   <>
                     {report.type !== "profile" && (
                       <Button

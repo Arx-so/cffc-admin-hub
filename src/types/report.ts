@@ -1,8 +1,8 @@
 export type ReportStatus =
-  | "pendente"
-  | "conteudo_removido"
-  | "usuario_bloqueado"
-  | "rejeitado";
+  | "pending"
+  | "content_removed"
+  | "user_blocked"
+  | "rejected";
 
 export type ReportTargetType = "video" | "profile" | "validation";
 

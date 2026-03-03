@@ -2,7 +2,7 @@ export interface Report {
   id: string;
   type: "video" | "perfil" | "validação";
   reason: string;
-  status: "pendente" | "resolvido" | "rejeitado";
+  status: "pending" | "content_removed" | "user_blocked" | "rejected";
   reportedUser: string;
   reportedBy: string;
   createdAt: string;
@@ -38,11 +38,11 @@ export interface AppUser {
 }
 
 export const mockReports: Report[] = [
-  { id: "1", type: "video", reason: "Conteúdo impróprio", status: "pendente", reportedUser: "Carlos Silva", reportedBy: "Ana Souza", createdAt: "2026-02-20" },
-  { id: "2", type: "perfil", reason: "Perfil falso", status: "pendente", reportedUser: "João Santos", reportedBy: "Maria Lima", createdAt: "2026-02-19" },
-  { id: "3", type: "validação", reason: "Documento suspeito", status: "resolvido", reportedUser: "Pedro Costa", reportedBy: "Sistema", createdAt: "2026-02-18" },
-  { id: "4", type: "video", reason: "Spam", status: "rejeitado", reportedUser: "Lucas Oliveira", reportedBy: "Fernanda Rocha", createdAt: "2026-02-17" },
-  { id: "5", type: "perfil", reason: "Assédio", status: "pendente", reportedUser: "Rafael Mendes", reportedBy: "Juliana Alves", createdAt: "2026-02-22" },
+  { id: "1", type: "video", reason: "Conteúdo impróprio", status: "pending", reportedUser: "Carlos Silva", reportedBy: "Ana Souza", createdAt: "2026-02-20" },
+  { id: "2", type: "perfil", reason: "Perfil falso", status: "pending", reportedUser: "João Santos", reportedBy: "Maria Lima", createdAt: "2026-02-19" },
+  { id: "3", type: "validação", reason: "Documento suspeito", status: "content_removed", reportedUser: "Pedro Costa", reportedBy: "Sistema", createdAt: "2026-02-18" },
+  { id: "4", type: "video", reason: "Spam", status: "rejected", reportedUser: "Lucas Oliveira", reportedBy: "Fernanda Rocha", createdAt: "2026-02-17" },
+  { id: "5", type: "perfil", reason: "Assédio", status: "pending", reportedUser: "Rafael Mendes", reportedBy: "Juliana Alves", createdAt: "2026-02-22" },
 ];
 
 export const mockPendingVideos: PendingVideo[] = [
