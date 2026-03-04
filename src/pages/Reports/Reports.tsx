@@ -29,9 +29,9 @@ export interface ReportsProps {
   reports: Report[];
   isLoading: boolean;
   error: Error | null;
-  removeContentMutation: UseMutationResult<void, Error, string, unknown>;
-  removeReportMutation: UseMutationResult<void, Error, string, unknown>;
-  blockUserMutation: UseMutationResult<void, Error, string, unknown>;
+  removeContentMutation: UseMutationResult<void, Error, Report, unknown>;
+  removeReportMutation: UseMutationResult<void, Error, Report, unknown>;
+  blockUserMutation: UseMutationResult<void, Error, Report, unknown>;
 }
 
 export function Reports({
@@ -87,7 +87,7 @@ export function Reports({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => removeContentMutation.mutate(report.id)}
+                        onClick={() => removeContentMutation.mutate(report)}
                         disabled={removeContentMutation.isPending}
                         title="Remover conteúdo"
                       >
@@ -97,7 +97,7 @@ export function Reports({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => removeReportMutation.mutate(report.id)}
+                      onClick={() => removeReportMutation.mutate(report)}
                       disabled={removeReportMutation.isPending}
                       title="Remover denúncia"
                     >
@@ -107,7 +107,7 @@ export function Reports({
                       size="sm"
                       variant="outline"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => blockUserMutation.mutate(report.id)}
+                      onClick={() => blockUserMutation.mutate(report)}
                       disabled={blockUserMutation.isPending}
                       title="Bloquear usuário"
                     >

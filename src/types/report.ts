@@ -24,4 +24,6 @@ export interface Report {
   reportedUser: string;
   reportedBy: string;
   createdAt: string;
+  /** Set when target_type === "profile" for adm_logs.user_id */
+  targetUserId?: string;
 }

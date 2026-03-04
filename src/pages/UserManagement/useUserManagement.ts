@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { functions } from "@/lib/functions";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/stores";
+import { insertAdmLog, fetchAdmLogsByUserId, fetchAdmLogsByAdmId } from "@/processes/admLogs";
 import type { ProfileRow } from "./types";
 
 const PAGE_SIZE = 10;
@@ -36,6 +37,7 @@ export function useUserManagement() {
 	const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
 	const [newAdminEmail, setNewAdminEmail] = useState("");
 	const [createAdminModalOpen, setCreateAdminModalOpen] = useState(false);
+	const [historyUser, setHistoryUser] = useState<ProfileRow | null>(null);
 	const { toast } = useToast();
 
 	useEffect(() => {
@@ -105,6 +107,11 @@ export function useUserManagement() {
 			setSelectedUser((prev) =>
 				prev?.id === targetUserId ? { ...prev, banned_until: newBannedUntil } : prev
 			);
+			insertAdmLog({
+				admId: userId!,
+				userId: targetUserId,
+				type: nowBlocked ? "user_banned" : "user_unbanned",
+			});
 			toast({ title: "Status atualizado", variant: "success" });
 		},
 		onError: (err: Error) => {
@@ -137,6 +144,11 @@ export function useUserManagement() {
 			setSelectedUser((prev) =>
 				prev?.id === athleteUserId ? { ...prev, validated: false } : prev
 			);
+			insertAdmLog({
+				admId: userId!,
+				userId: athleteUserId,
+				type: "user_validation_removed",
+			});
 			toast({ title: "Validação removida", variant: "success" });
 		},
 		onError: (err: Error) => {
@@ -171,6 +183,11 @@ export function useUserManagement() {
 			setSelectedUser((prev) =>
 				prev?.id === athleteUserId ? { ...prev, validated: true } : prev
 			);
+			insertAdmLog({
+				admId: userId!,
+				userId: athleteUserId,
+				type: "user_validated",
+			});
 			toast({ title: "Conta validada", variant: "success" });
 		},
 		onError: (err: Error) => {
@@ -218,6 +235,12 @@ export function useUserManagement() {
 			});
 			setNewAdminEmail("");
 			setCreateAdminModalOpen(false);
+			insertAdmLog({
+				admId: userId!,
+				userId: result.userId,
+				type: "user_created",
+				metadata: { email: result.email, role: "admin" },
+			});
 			toast({ title: "Admin criado com sucesso", variant: "success" });
 		},
 		onError: () => {
@@ -232,6 +255,21 @@ export function useUserManagement() {
 		if (!newAdminEmail.trim()) return;
 		createAdminMutation.mutate(newAdminEmail.trim());
 	};
+
+	const isHistoryUserAdmin = historyUser?.role === "admin";
+	const {
+		data: historyLogs = [],
+		isLoading: historyLogsLoading,
+	} = useQuery({
+		queryKey: ["adm_logs", historyUser?.id ?? "", isHistoryUserAdmin],
+		queryFn: () =>
+			isHistoryUserAdmin
+				? fetchAdmLogsByAdmId(historyUser!.id)
+				: fetchAdmLogsByUserId(historyUser!.id),
+		enabled: !!historyUser?.id,
+		staleTime: 0,
+		refetchOnMount: "always",
+	});
 
 	return {
 		rows,
@@ -256,5 +294,9 @@ export function useUserManagement() {
 		createAdminMutation,
 		createAdmin,
 		isPlaceholderData,
+		historyUser,
+		setHistoryUser,
+		historyLogs,
+		historyLogsLoading,
 	};
 }

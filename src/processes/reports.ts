@@ -39,6 +39,7 @@ export async function fetchReports(): Promise<Report[]> {
         ? nameById.get(r.target_id) ?? "—"
         : r.target_id,
     createdAt: formatDate(r.created_at),
+    targetUserId: r.target_type === "profile" ? r.target_id : undefined,
   }));
 }
 

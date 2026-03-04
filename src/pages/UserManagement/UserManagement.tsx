@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Ban, Unlock, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Ban, Unlock, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2, ChevronLeft, ChevronRight, History } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
+import { ADM_LOG_TYPE_LABELS } from "@/constants/admLog";
+import type { AdmLogWithNames } from "@/types/admLog";
 
 export interface UserManagementProps {
   rows: ProfileRow[];
@@ -33,6 +35,10 @@ export interface UserManagementProps {
   createAdminModalOpen: boolean;
   setCreateAdminModalOpen: (open: boolean) => void;
   isPlaceholderData?: boolean;
+  historyUser: ProfileRow | null;
+  setHistoryUser: (u: ProfileRow | null) => void;
+  historyLogs: AdmLogWithNames[];
+  historyLogsLoading: boolean;
 }
 
 export function UserManagement({
@@ -58,6 +64,10 @@ export function UserManagement({
   createAdminModalOpen,
   setCreateAdminModalOpen,
   isPlaceholderData,
+  historyUser,
+  setHistoryUser,
+  historyLogs,
+  historyLogsLoading,
 }: UserManagementProps) {
   if (isLoading && !isPlaceholderData) {
     return (
@@ -169,6 +179,9 @@ export function UserManagement({
                       <TableCell>{user.validated ? "✓" : "✗"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button size="icon" variant="ghost" title="Histórico" onClick={() => setHistoryUser(user)}>
+                            <History className="h-4 w-4" />
+                          </Button>
                           <Button size="icon" variant="ghost" title="Ver detalhes" onClick={() => setSelectedUser(user)}>
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -265,6 +278,42 @@ export function UserManagement({
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!historyUser} onOpenChange={() => setHistoryUser(null)}>
+        <DialogContent className="max-w-md max-h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="mb-4">
+              Histórico {historyUser ? (historyUser.role === "admin" ? `— ações de ${historyUser.name ?? historyUser.email}` : `— ações sobre ${historyUser.name ?? historyUser.email}`) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto min-h-0 flex-1 pr-2 -mr-2">
+            {historyLogsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : historyLogs.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">Nenhum registro encontrado.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {historyLogs.map((log) => (
+                  <li key={log.id} className="border-b border-border/50 pb-2 last:border-0">
+                    <span className="font-medium">{ADM_LOG_TYPE_LABELS[log.type]}</span>
+                    {historyUser?.role === "admin" && log.user_name && (
+                      <span className="text-muted-foreground"> → {log.user_name}</span>
+                    )}
+                    {historyUser?.role !== "admin" && log.adm_name && (
+                      <span className="text-muted-foreground"> por {log.adm_name}</span>
+                    )}
+                    <div className="text-muted-foreground text-xs mt-0.5">
+                      {new Date(log.created_at).toLocaleString("pt-BR")}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
