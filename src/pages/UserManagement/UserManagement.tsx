@@ -6,8 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Ban, Unlock, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2, ChevronLeft, ChevronRight, History } from "lucide-react";
+import { Ban, Unlock, ShieldCheck, ShieldOff, Eye, UserPlus, Search, Loader2, ChevronLeft, ChevronRight, History, MoreVertical } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { ADM_LOG_TYPE_LABELS } from "@/constants/admLog";
 import type { AdmLogWithNames } from "@/types/admLog";
@@ -178,49 +184,59 @@ export function UserManagement({
                       </TableCell>
                       <TableCell>{user.validated ? "✓" : "✗"}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" title="Histórico" onClick={() => setHistoryUser(user)}>
-                            <History className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" title="Ver detalhes" onClick={() => setSelectedUser(user)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={status === "ativo" ? "Bloquear" : "Desbloquear"}
-                            onClick={() => toggleBlockMutation.mutate(user.id)}
-                            disabled={toggleBlockMutation.isPending}
-                          >
-                            {status === "ativo" ? (
-                              <Ban className="h-4 w-4" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="icon" className="cursor-pointer">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-[180px]">
+                            <DropdownMenuItem onClick={() => setHistoryUser(user)} className="cursor-pointer">
+                              <History className="h-4 w-4 mr-2" />
+                              Histórico
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setSelectedUser(user)} className="cursor-pointer">
+                              <Eye className="h-4 w-4 mr-2" />
+                              Informações do Usuário
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => toggleBlockMutation.mutate(user.id)}
+                              disabled={toggleBlockMutation.isPending}
+                              className={`cursor-pointer ${status === "ativo" ? "text-destructive focus:text-destructive" : "text-success focus:text-success"}`}
+                            >
+                              {status === "ativo" ? (
+                                <>
+                                  <Ban className="h-4 w-4 mr-2" />
+                                  Bloquear
+                                </>
+                              ) : (
+                                <>
+                                  <Unlock className="h-4 w-4 mr-2" />
+                                  Desbloquear
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                            {user.validated ? (
+                              <DropdownMenuItem
+                                onClick={() => removeValidationMutation.mutate(user.id)}
+                                disabled={removeValidationMutation.isPending}
+                                className="cursor-pointer text-destructive focus:text-destructive"
+                              >
+                                <ShieldOff className="h-4 w-4 mr-2" />
+                                Remover validação
+                              </DropdownMenuItem>
                             ) : (
-                              <Unlock className="h-4 w-4" />
+                              <DropdownMenuItem
+                                onClick={() => addValidationMutation.mutate(user.id)}
+                                disabled={addValidationMutation.isPending}
+                                className="cursor-pointer"
+                              >
+                                <ShieldCheck className="h-4 w-4 mr-2" />
+                                Validar conta
+                              </DropdownMenuItem>
                             )}
-                          </Button>
-                          {user.validated && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Remover validação"
-                              onClick={() => removeValidationMutation.mutate(user.id)}
-                              disabled={removeValidationMutation.isPending}
-                            >
-                              <ShieldOff className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {!user.validated && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Validar conta"
-                              onClick={() => addValidationMutation.mutate(user.id)}
-                              disabled={addValidationMutation.isPending}
-                            >
-                              <ShieldCheck className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   );

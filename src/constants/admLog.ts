@@ -13,5 +13,7 @@ export const ADM_LOG_TYPE_LABELS: Record<AdmLogType, string> = {
   athlete_profile_updated: "Perfil de atleta atualizado",
   professional_document_approved: "Documento profissional aprovado",
   professional_document_rejected: "Documento profissional rejeitado",
+  media_approved: "Vídeo aprovado",
+  media_rejected: "Vídeo rejeitado",
   other: "Outra ação",
 };

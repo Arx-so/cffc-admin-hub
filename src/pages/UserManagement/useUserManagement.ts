@@ -122,9 +122,9 @@ export function useUserManagement() {
 	const removeValidationMutation = useMutation({
 		mutationFn: async (athleteUserId: string) => {
 			const { error } = await supabase
-				.from("validation")
-				.delete()
-				.eq("athlete_user_id", athleteUserId);
+				.from("profile")
+				.update({ verified: false })
+				.eq("id", athleteUserId);
 			if (error) throw error;
 			return athleteUserId;
 		},
@@ -159,11 +159,10 @@ export function useUserManagement() {
 	const addValidationMutation = useMutation({
 		mutationFn: async (athleteUserId: string) => {
 			if (!userId) throw new Error("Não autenticado");
-			const { error } = await supabase.from("validation").insert({
-				athlete_user_id: athleteUserId,
-				professional_user_id: userId,
-				status: "approved",
-			});
+			const { error } = await supabase
+				.from("profile")
+				.update({ verified: true })
+				.eq("id", athleteUserId);
 			if (error) throw error;
 			return athleteUserId;
 		},

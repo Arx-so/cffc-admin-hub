@@ -7,6 +7,9 @@ export const queryKeys = {
   },
   videos: {
     all: ["videos"] as const,
+    list: (page: number, pageSize: number) => ["videos", "list", page, pageSize] as const,
+    listByStatus: (status: string, page: number, pageSize: number) =>
+      ["videos", "list", status, page, pageSize] as const,
     pending: ["videos", "pending"] as const,
   },
   validations: {

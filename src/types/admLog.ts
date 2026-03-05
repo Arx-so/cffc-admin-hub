@@ -11,6 +11,8 @@ export type AdmLogType =
   | "user_deleted"
   | "report_handled"
   | "athlete_profile_updated"
+  | "media_approved"
+  | "media_rejected"
   | "other";
 
 export interface InsertAdmLogParams {
