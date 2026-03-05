@@ -107,6 +107,65 @@ export function useValidations() {
       if (error) throw error;
       return { documentId, profileId, status };
     },
+    onMutate: async ({ documentId, profileId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["validations"] });
+      const prevPending = queryClient.getQueryData<ProfessionalValidationRow[]>(
+        queryKeys.validations.byStatus("pending")
+      );
+      const prevApproved = queryClient.getQueryData<ProfessionalValidationRow[]>(
+        queryKeys.validations.byStatus("approved")
+      );
+      const prevRejected = queryClient.getQueryData<ProfessionalValidationRow[]>(
+        queryKeys.validations.byStatus("rejected")
+      );
+      const item = (prevPending ?? []).find(
+        (r) => r.documentId === documentId || r.id === profileId
+      );
+      if (item) {
+        const moved: ProfessionalValidationRow = {
+          ...item,
+          status,
+        };
+        queryClient.setQueryData(
+          queryKeys.validations.byStatus("pending"),
+          (prevPending ?? []).filter((r) => r.documentId !== documentId && r.id !== profileId)
+        );
+        if (status === "aprovado") {
+          queryClient.setQueryData(
+            queryKeys.validations.byStatus("approved"),
+            [moved, ...(prevApproved ?? [])]
+          );
+        } else {
+          queryClient.setQueryData(
+            queryKeys.validations.byStatus("rejected"),
+            [moved, ...(prevRejected ?? [])]
+          );
+        }
+      }
+      return { prevPending, prevApproved, prevRejected };
+    },
+    onError: (err, _variables, context) => {
+      if (context?.prevPending !== undefined)
+        queryClient.setQueryData(
+          queryKeys.validations.byStatus("pending"),
+          context.prevPending
+        );
+      if (context?.prevApproved !== undefined)
+        queryClient.setQueryData(
+          queryKeys.validations.byStatus("approved"),
+          context.prevApproved
+        );
+      if (context?.prevRejected !== undefined)
+        queryClient.setQueryData(
+          queryKeys.validations.byStatus("rejected"),
+          context.prevRejected
+        );
+      toast({
+        title: "Erro ao atualizar status",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
     onSuccess: (_, { profileId, documentId, status }) => {
       queryClient.invalidateQueries({ queryKey: ["validations"] });
       if (admId) {
@@ -115,19 +174,10 @@ export function useValidations() {
           userId: profileId,
           type: status === "aprovado" ? "professional_document_approved" : "professional_document_rejected",
           metadata: { documentId },
-        }).catch(() => {
-          // Log falhou; não quebra a UX (toast de sucesso segue)
-        });
+        }).catch(() => {});
       }
       toast({
         title: status === "aprovado" ? "Profissional aprovado" : "Profissional rejeitado",
-      });
-    },
-    onError: (err) => {
-      toast({
-        title: "Erro ao atualizar status",
-        description: err.message,
-        variant: "destructive",
       });
     },
   });
