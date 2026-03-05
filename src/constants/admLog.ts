@@ -11,5 +11,7 @@ export const ADM_LOG_TYPE_LABELS: Record<AdmLogType, string> = {
   user_deleted: "Usuário eliminado",
   report_handled: "Denúncia tratada",
   athlete_profile_updated: "Perfil de atleta atualizado",
+  professional_document_approved: "Documento profissional aprovado",
+  professional_document_rejected: "Documento profissional rejeitado",
   other: "Outra ação",
 };

@@ -1,21 +1,36 @@
 import { supabase } from "@/lib/supabase";
 import type { Report, ReportRow, ReportStatus } from "@/types/report";
 
-export async function fetchReports(): Promise<Report[]> {
-  const { data: rows, error } = await supabase
-    .from("report")
-    .select("*")
-    .order("created_at", { ascending: false });
-
+async function fetchReportRows(status?: ReportStatus): Promise<ReportRow[]> {
+  let q = supabase.from("report").select("*").order("created_at", { ascending: false });
+  if (status) q = q.eq("status", status);
+  const { data: rows, error } = await q;
   if (error) throw new Error(error.message);
-  if (!rows?.length) return [];
+  return (rows ?? []) as ReportRow[];
+}
 
-  const reportRows = rows as ReportRow[];
-  const reporterIds = [...new Set(reportRows.map((r) => r.reporter_user_id))];
+function mapRowsToReports(rows: ReportRow[], nameById: Map<string, string>): Report[] {
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.target_type,
+    reason: r.reason,
+    status: r.status,
+    reportedBy: nameById.get(r.reporter_user_id) ?? "—",
+    reportedUser:
+      r.target_type === "profile" ? nameById.get(r.target_id) ?? "—" : r.target_id,
+    createdAt: formatDate(r.created_at),
+    targetUserId: r.target_type === "profile" ? r.target_id : undefined,
+  }));
+}
+
+export async function fetchReports(): Promise<Report[]> {
+  const rows = await fetchReportRows();
+
+  if (!rows.length) return [];
+
+  const reporterIds = [...new Set(rows.map((r) => r.reporter_user_id))];
   const targetProfileIds = [
-    ...new Set(
-      reportRows.filter((r) => r.target_type === "profile").map((r) => r.target_id)
-    ),
+    ...new Set(rows.filter((r) => r.target_type === "profile").map((r) => r.target_id)),
   ];
   const allProfileIds = [...new Set([...reporterIds, ...targetProfileIds])];
 
@@ -28,19 +43,29 @@ export async function fetchReports(): Promise<Report[]> {
     (profiles ?? []).map((p) => [p.id, p.name ?? "—"])
   );
 
-  return reportRows.map((r) => ({
-    id: r.id,
-    type: r.target_type,
-    reason: r.reason,
-    status: r.status,
-    reportedBy: nameById.get(r.reporter_user_id) ?? "—",
-    reportedUser:
-      r.target_type === "profile"
-        ? nameById.get(r.target_id) ?? "—"
-        : r.target_id,
-    createdAt: formatDate(r.created_at),
-    targetUserId: r.target_type === "profile" ? r.target_id : undefined,
-  }));
+  return mapRowsToReports(rows, nameById);
+}
+
+export async function fetchReportsByStatus(status: ReportStatus): Promise<Report[]> {
+  const rows = await fetchReportRows(status);
+  if (!rows.length) return [];
+
+  const reporterIds = [...new Set(rows.map((r) => r.reporter_user_id))];
+  const targetProfileIds = [
+    ...new Set(rows.filter((r) => r.target_type === "profile").map((r) => r.target_id)),
+  ];
+  const allProfileIds = [...new Set([...reporterIds, ...targetProfileIds])];
+
+  const { data: profiles } = await supabase
+    .from("profile")
+    .select("id, name")
+    .in("id", allProfileIds);
+
+  const nameById = new Map(
+    (profiles ?? []).map((p) => [p.id, p.name ?? "—"])
+  );
+
+  return mapRowsToReports(rows, nameById);
 }
 
 export async function updateReportStatus(
