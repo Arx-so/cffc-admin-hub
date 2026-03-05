@@ -14,11 +14,13 @@ const statusFromDb = (s: string): ProfessionalValidationRow["status"] => {
   return "pendente";
 };
 
-async function fetchProfessionalValidations(): Promise<ProfessionalValidationRow[]> {
+type DbStatus = "pending" | "approved" | "rejected";
+
+async function fetchProfessionalValidationsByStatus(status: DbStatus): Promise<ProfessionalValidationRow[]> {
   const { data, error } = await supabase
     .from("professional_document")
     .select("id, url, profile_id, status, created_at, profile:profile_id(id, name, email)")
-    .eq("status", "pending")
+    .eq("status", status)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -53,15 +55,39 @@ async function fetchProfessionalValidations(): Promise<ProfessionalValidationRow
   });
 }
 
+function fetchPending() {
+  return fetchProfessionalValidationsByStatus("pending");
+}
+function fetchApproved() {
+  return fetchProfessionalValidationsByStatus("approved");
+}
+function fetchRejected() {
+  return fetchProfessionalValidationsByStatus("rejected");
+}
+
 export function useValidations() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const admId = useAuthStore((s) => s.user?.id);
 
-  const { data: validations = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.validations.all,
-    queryFn: fetchProfessionalValidations,
+  const pending = useQuery({
+    queryKey: queryKeys.validations.byStatus("pending"),
+    queryFn: fetchPending,
   });
+  const approved = useQuery({
+    queryKey: queryKeys.validations.byStatus("approved"),
+    queryFn: fetchApproved,
+  });
+  const rejected = useQuery({
+    queryKey: queryKeys.validations.byStatus("rejected"),
+    queryFn: fetchRejected,
+  });
+
+  const validationsPending = pending.data ?? [];
+  const validationsApproved = approved.data ?? [];
+  const validationsRejected = rejected.data ?? [];
+  const isLoading = pending.isLoading || approved.isLoading || rejected.isLoading;
+  const error = pending.error ?? approved.error ?? rejected.error;
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({
@@ -82,7 +108,7 @@ export function useValidations() {
       return { documentId, profileId, status };
     },
     onSuccess: (_, { profileId, documentId, status }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.validations.all });
+      queryClient.invalidateQueries({ queryKey: ["validations"] });
       if (admId) {
         void insertAdmLog({
           admId,
@@ -135,7 +161,9 @@ export function useValidations() {
   }
 
   return {
-    validations,
+    validationsPending,
+    validationsApproved,
+    validationsRejected,
     isLoading,
     error: error ?? null,
     updateStatusMutation,

@@ -9,6 +9,7 @@ export const queryKeys = {
   },
   validations: {
     all: ["validations"] as const,
+    byStatus: (status: "pending" | "approved" | "rejected") => ["validations", status] as const,
   },
   users: {
     all: ["users"] as const,
