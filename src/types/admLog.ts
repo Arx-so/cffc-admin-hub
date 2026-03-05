@@ -6,6 +6,8 @@ export type AdmLogType =
   | "user_unbanned"
   | "user_validated"
   | "user_validation_removed"
+  | "professional_document_approved"
+  | "professional_document_rejected"
   | "user_deleted"
   | "report_handled"
   | "athlete_profile_updated"
