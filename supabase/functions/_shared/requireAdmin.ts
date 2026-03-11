@@ -35,6 +35,14 @@ export async function requireAdmin(req: Request): Promise<{ supabase: ReturnType
 			headers: { "Content-Type": "application/json" },
 		});
 	}
+	const { data: fullUser } = await supabase.auth.admin.getUserById(user.id);
+	const bannedUntil = fullUser?.user?.banned_until;
+	if (bannedUntil && new Date(bannedUntil) > new Date()) {
+		return new Response(JSON.stringify({ message: "Conta bloqueada" }), {
+			status: 403,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
 	return { supabase, userId: user.id };
 }
 

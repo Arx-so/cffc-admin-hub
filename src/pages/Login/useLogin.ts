@@ -16,9 +16,9 @@ export function useLogin() {
       setError("Preencha todos os campos");
       return;
     }
-    const success = await login(email, password);
-    if (success) navigate("/");
-    else setError("Credenciais inválidas");
+    const result = await login(email, password);
+    if (result.ok) navigate("/");
+    else setError(result.reason === "banned" ? "Conta bloqueada." : "Credenciais inválidas");
   };
 
   return { email, setEmail, password, setPassword, error, isLoading, handleSubmit };

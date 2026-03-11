@@ -1,2 +1,2 @@
-export { useAuthStore } from "./auth";
+export { useAuthStore, isCurrentUserBanned } from "./auth";
 export type { User, UserRole } from "./auth";

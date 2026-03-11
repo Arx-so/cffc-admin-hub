@@ -11,13 +11,24 @@ export interface User {
   role: UserRole;
 }
 
+export type LoginResult =
+  | { ok: true }
+  | { ok: false; reason: "credentials" | "banned" };
+
 const LOGIN_DATE_KEY = "cffc_admin_login_date";
+
+/** Returns true if the current user is banned (reads banned_until from auth.users via RPC). */
+export async function isCurrentUserBanned(): Promise<boolean> {
+  const { data, error } = await supabase.rpc("get_my_banned_until");
+  if (error || data == null) return false;
+  return new Date(data) > new Date();
+}
 
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isInitialized: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   setUser: (partial: Partial<Pick<User, "name" | "role">>) => void;
   setLoading: (loading: boolean) => void;
@@ -40,11 +51,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isInitialized: false,
 
-  login: async (email: string, password: string): Promise<boolean> => {
+  login: async (email: string, password: string): Promise<LoginResult> => {
     set({ isLoading: true });
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     set({ isLoading: false });
-    if (error) return false;
+    if (error) return { ok: false, reason: "credentials" };
+    if (await isCurrentUserBanned()) {
+      await supabase.auth.signOut();
+      try {
+        localStorage.removeItem(LOGIN_DATE_KEY);
+      } catch {
+        /* ignore */
+      }
+      set({ user: null });
+      return { ok: false, reason: "banned" };
+    }
     const today = new Date().toDateString();
     try {
       localStorage.setItem(LOGIN_DATE_KEY, today);
@@ -52,7 +73,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       /* ignore */
     }
     set({ user: userFromSession(data.session) });
-    return true;
+    return { ok: true };
   },
 
   logout: async () => {
@@ -81,6 +102,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const today = new Date().toDateString();
     const savedLoginDate = (typeof localStorage !== "undefined" && localStorage.getItem(LOGIN_DATE_KEY)) || null;
     if (session && savedLoginDate && savedLoginDate !== today) {
+      await supabase.auth.signOut();
+      if (typeof localStorage !== "undefined") localStorage.removeItem(LOGIN_DATE_KEY);
+      set({ user: null, isInitialized: true });
+    } else if (session && (await isCurrentUserBanned())) {
       await supabase.auth.signOut();
       if (typeof localStorage !== "undefined") localStorage.removeItem(LOGIN_DATE_KEY);
       set({ user: null, isInitialized: true });
