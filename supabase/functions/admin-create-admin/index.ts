@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
 	const admin = await requireAdmin(req);
 	if (admin instanceof Response) return admin;
 	const { supabase } = admin;
-	let body: { email?: string; password?: string };
+	let body: { email?: string };
 	try {
 		body = await req.json();
 	} catch {
@@ -58,12 +58,7 @@ Deno.serve(async (req: Request) => {
 	if (!email) {
 		return jsonResponse(JSON.stringify({ message: "email is required" }), 400);
 	}
-	const password = body.password?.trim() || undefined;
-	const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-		email,
-		password: password || undefined,
-		email_confirm: true,
-	});
+	const { data: newUser, error: createError } = await supabase.auth.admin.inviteUserByEmail(email);
 	if (createError) {
 		return jsonResponse(JSON.stringify({ message: createError.message }), 400);
 	}

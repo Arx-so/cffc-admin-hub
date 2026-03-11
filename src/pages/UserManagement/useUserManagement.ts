@@ -205,7 +205,7 @@ export function useUserManagement() {
 				body: JSON.stringify({ email }),
 			});
 			const data = await res.json().catch(() => ({}));
-			if (!res.ok) throw new Error((data as { message?: string }).message ?? "Erro ao criar admin");
+			if (!res.ok) throw new Error((data as { message?: string }).message ?? "Erro ao convidar admin");
 			return { email, userId: (data as { userId?: string }).userId } as { email: string; userId: string };
 		},
 		onSuccess: (result) => {
@@ -240,7 +240,7 @@ export function useUserManagement() {
 				type: "user_created",
 				metadata: { email: result.email, role: "admin" },
 			});
-			toast({ title: "Admin criado com sucesso", variant: "success" });
+			toast({ title: "Convite enviado com sucesso", variant: "success" });
 		},
 		onError: () => {
 			toast({

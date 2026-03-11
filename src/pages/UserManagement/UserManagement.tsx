@@ -105,7 +105,7 @@ export function UserManagement({
         <Dialog open={createAdminModalOpen} onOpenChange={setCreateAdminModalOpen}>
           <DialogTrigger asChild>
             <Button>
-              <UserPlus className="h-4 w-4 mr-2" /> Criar Admin
+              <UserPlus className="h-4 w-4 mr-2" /> Convidar Admin
             </Button>
           </DialogTrigger>
           <DialogContent>
