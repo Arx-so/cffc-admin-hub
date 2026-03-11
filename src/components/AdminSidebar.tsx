@@ -77,7 +77,7 @@ export function AdminSidebar() {
           onClick={handleLogout}
         >
           <LogOut className="h-4 w-4" />
-          Sair da Conta
+          Sair da conta
         </Button>
       </SidebarFooter>
     </Sidebar>

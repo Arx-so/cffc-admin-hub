@@ -110,7 +110,7 @@ export function UserManagement({
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Criar novo Administrador</DialogTitle>
+              <DialogTitle>Convidar novo Administrador</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
@@ -159,7 +159,7 @@ export function UserManagement({
               {rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    Nenhum utilizador encontrado.
+                    Nenhum usuário encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
