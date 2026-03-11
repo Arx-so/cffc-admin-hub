@@ -12,29 +12,6 @@ alter table "public"."professional_document" drop column "media_id";
 
 alter table "public"."professional_document" add column "url" text;
 
-
-  create policy "media_update_admin"
-  on "public"."media"
-  as permissive
-  for update
-  to authenticated
-using ((EXISTS ( SELECT 1
-   FROM public.profile p
-  WHERE ((p.id = auth.uid()) AND (p.role = 'admin'::public.user_role)))))
-with check ((EXISTS ( SELECT 1
-   FROM public.profile p
-  WHERE ((p.id = auth.uid()) AND (p.role = 'admin'::public.user_role)))));
-
-
-
-  create policy "media_bucket_admin_select"
-  on "storage"."objects"
-  as permissive
-  for select
-  to authenticated
-using (((bucket_id = 'media'::text) AND (EXISTS ( SELECT 1
-   FROM public.profile p
-  WHERE ((p.id = auth.uid()) AND (p.role = 'admin'::public.user_role))))));
-
-
+-- Policies "media_update_admin" and "media_bucket_admin_select" already created
+-- in 20260305160000_media_admin_update_status.sql and 20260305170000_storage_media_admin_select.sql
 
