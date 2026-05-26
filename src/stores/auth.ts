@@ -17,6 +17,9 @@ export type LoginResult =
 
 const LOGIN_DATE_KEY = "cffc_admin_login_date";
 
+/** Evita que onAuthStateChange defina user antes do login validar role admin. */
+let authListenerPaused = false;
+
 /** Returns true if the current user is banned (reads banned_until from auth.users via RPC). */
 export async function isCurrentUserBanned(): Promise<boolean> {
   const { data, error } = await supabase.rpc("get_my_banned_until");
@@ -46,34 +49,62 @@ function userFromSession(session: Session | null): User | null {
   };
 }
 
+async function fetchProfileRole(userId: string): Promise<UserRole | null> {
+  const { data, error } = await supabase
+    .from("profile")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !data?.role) return null;
+  return data.role as UserRole;
+}
+
+async function clearAuthSession(set: (partial: Partial<AuthState>) => void): Promise<void> {
+  await supabase.auth.signOut();
+  try {
+    localStorage.removeItem(LOGIN_DATE_KEY);
+  } catch {
+    /* ignore */
+  }
+  set({ user: null });
+}
+
+function adminUserFromSession(session: Session): User {
+  return { ...userFromSession(session)!, role: "admin" };
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
   isInitialized: false,
 
   login: async (email: string, password: string): Promise<LoginResult> => {
+    authListenerPaused = true;
     set({ isLoading: true });
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    set({ isLoading: false });
-    if (error) return { ok: false, reason: "credentials" };
-    if (await isCurrentUserBanned()) {
-      await supabase.auth.signOut();
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { ok: false, reason: "credentials" };
+      if (await isCurrentUserBanned()) {
+        await clearAuthSession(set);
+        return { ok: false, reason: "banned" };
+      }
+      const userId = data.session?.user?.id;
+      if (!userId || (await fetchProfileRole(userId)) !== "admin") {
+        await clearAuthSession(set);
+        return { ok: false, reason: "credentials" };
+      }
+      const today = new Date().toDateString();
       try {
-        localStorage.removeItem(LOGIN_DATE_KEY);
+        localStorage.setItem(LOGIN_DATE_KEY, today);
       } catch {
         /* ignore */
       }
-      set({ user: null });
-      return { ok: false, reason: "banned" };
+      set({ user: adminUserFromSession(data.session!) });
+      return { ok: true };
+    } finally {
+      authListenerPaused = false;
+      set({ isLoading: false });
     }
-    const today = new Date().toDateString();
-    try {
-      localStorage.setItem(LOGIN_DATE_KEY, today);
-    } catch {
-      /* ignore */
-    }
-    set({ user: userFromSession(data.session) });
-    return { ok: true };
   },
 
   logout: async () => {
@@ -109,15 +140,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await supabase.auth.signOut();
       if (typeof localStorage !== "undefined") localStorage.removeItem(LOGIN_DATE_KEY);
       set({ user: null, isInitialized: true });
-    } else {
-      if (session && typeof localStorage !== "undefined" && !savedLoginDate) {
-        localStorage.setItem(LOGIN_DATE_KEY, today);
+    } else if (session) {
+      const userId = session.user.id;
+      const role = await fetchProfileRole(userId);
+      if (role !== "admin") {
+        await supabase.auth.signOut();
+        if (typeof localStorage !== "undefined") localStorage.removeItem(LOGIN_DATE_KEY);
+        set({ user: null, isInitialized: true });
+      } else {
+        if (typeof localStorage !== "undefined" && !savedLoginDate) {
+          localStorage.setItem(LOGIN_DATE_KEY, today);
+        }
+        set({ user: adminUserFromSession(session), isInitialized: true });
       }
-      set({ user: userFromSession(session), isInitialized: true });
+    } else {
+      set({ user: null, isInitialized: true });
     }
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ user: userFromSession(session) });
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (authListenerPaused) return;
+      if (!session) {
+        set({ user: null });
+        return;
+      }
+      const role = await fetchProfileRole(session.user.id);
+      if (role !== "admin") {
+        await supabase.auth.signOut();
+        try {
+          localStorage.removeItem(LOGIN_DATE_KEY);
+        } catch {
+          /* ignore */
+        }
+        set({ user: null });
+        return;
+      }
+      set({ user: adminUserFromSession(session) });
     });
   },
 }));

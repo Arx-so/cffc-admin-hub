@@ -4,7 +4,7 @@ import { useLogin } from "./useLogin";
 import { Login } from "./Login";
 
 export default function LoginPage() {
-  const { user, isInitialized } = useAuthStore();
+  const { user, isInitialized, isLoading } = useAuthStore();
   const props = useLogin();
 
   if (!isInitialized) {
@@ -14,7 +14,7 @@ export default function LoginPage() {
       </div>
     );
   }
-  if (user) return <Navigate to="/" replace />;
+  if (user && !isLoading) return <Navigate to="/" replace />;
 
   return <Login {...props} />;
 }

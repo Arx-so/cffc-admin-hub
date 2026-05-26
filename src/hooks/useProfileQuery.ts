@@ -9,14 +9,15 @@ interface ProfileRow {
   role: UserRole;
 }
 
-async function fetchProfile(userId: string): Promise<ProfileRow> {
+async function fetchProfile(userId: string): Promise<ProfileRow | null> {
   const { data, error } = await supabase
     .from("profile")
     .select("name, role")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
   if (error) throw error;
-  return { name: data?.name ?? null, role: (data?.role ?? "athlete") as UserRole };
+  if (!data) return null;
+  return { name: data.name ?? null, role: (data.role ?? "athlete") as UserRole };
 }
 
 /** Fetches current user's profile with useQuery and syncs name/role into auth store. */
