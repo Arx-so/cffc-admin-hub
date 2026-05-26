@@ -1,10 +1,12 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores";
+import { useProfileQuery } from "@/hooks/useProfileQuery";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/AdminSidebar";
 
 export default function AdminLayout() {
   const { user, isInitialized } = useAuthStore();
+  const { data: profile, isFetched } = useProfileQuery();
 
   if (!isInitialized) {
     return (
@@ -14,6 +16,7 @@ export default function AdminLayout() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (isFetched && profile && profile.role !== "admin") return <Navigate to="/login" replace />;
 
   return (
     <SidebarProvider>

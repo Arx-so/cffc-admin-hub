@@ -1,37 +1,174 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchPendingVideos, PendingVideo } from "@/data/mock";
+import {
+  fetchVideoMediaByStatus,
+  updateMediaStatus,
+  type FetchVideoMediaResult,
+} from "@/processes/media";
+import { insertAdmLog } from "@/processes/admLogs";
+import type { MediaVideoWithSignedUrls } from "@/types/media";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthStore } from "@/stores";
+
+const PAGE_SIZE = 20;
+
+export type VideoTab = "pending" | "approved" | "rejected";
+
+export type VideoStatusAction = "aprovado" | "rejeitado";
+
+export interface UpdateVideoStatusParams {
+  id: string;
+  status: VideoStatusAction;
+  athleteUserId: string;
+  /** Página atual da lista pendente (para atualizar o cache correto) */
+  pendingPage?: number;
+  /** Vídeo completo para adicionar à lista aprovados/rejeitados no cache */
+  video?: MediaVideoWithSignedUrls;
+}
+
+function statusToDb(status: VideoStatusAction): "approved" | "rejected" {
+  return status === "aprovado" ? "approved" : "rejected";
+}
+
+export interface TabListState {
+  items: MediaVideoWithSignedUrls[];
+  isLoading: boolean;
+  error: Error | null;
+  page: number;
+  totalCount: number;
+  totalPages: number;
+  pageSize: number;
+}
 
 export function useVideos() {
   const queryClient = useQueryClient();
-  const { data: videos = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.videos.all,
-    queryFn: fetchPendingVideos,
-  });
+  const admId = useAuthStore((s) => s.user?.id);
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<VideoTab>("pending");
+  const [pages, setPages] = useState<Record<VideoTab, number>>({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+  });
+
+  const setPage = (tab: VideoTab, page: number) => {
+    setPages((prev) => ({ ...prev, [tab]: page }));
+  };
+
+  const pendingQuery = useQuery({
+    queryKey: queryKeys.videos.listByStatus("pending", pages.pending, PAGE_SIZE),
+    queryFn: () => fetchVideoMediaByStatus(pages.pending, PAGE_SIZE, "pending"),
+    enabled: activeTab === "pending",
+  });
+
+  const approvedQuery = useQuery({
+    queryKey: queryKeys.videos.listByStatus("approved", pages.approved, PAGE_SIZE),
+    queryFn: () => fetchVideoMediaByStatus(pages.approved, PAGE_SIZE, "approved"),
+    enabled: activeTab === "approved",
+  });
+
+  const rejectedQuery = useQuery({
+    queryKey: queryKeys.videos.listByStatus("rejected", pages.rejected, PAGE_SIZE),
+    queryFn: () => fetchVideoMediaByStatus(pages.rejected, PAGE_SIZE, "rejected"),
+    enabled: activeTab === "rejected",
+  });
+
+  const toTabState = (
+    data: FetchVideoMediaResult | undefined,
+    isLoading: boolean,
+    error: Error | null,
+    page: number
+  ): TabListState => {
+    const items = data?.items ?? [];
+    const totalCount = data?.totalCount ?? 0;
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    return {
+      items,
+      isLoading,
+      error,
+      page,
+      totalCount,
+      totalPages,
+      pageSize: PAGE_SIZE,
+    };
+  };
+
+  const pending = toTabState(
+    pendingQuery.data,
+    pendingQuery.isLoading,
+    pendingQuery.error as Error | null,
+    pages.pending
+  );
+  const approved = toTabState(
+    approvedQuery.data,
+    approvedQuery.isLoading,
+    approvedQuery.error as Error | null,
+    pages.approved
+  );
+  const rejected = toTabState(
+    rejectedQuery.data,
+    rejectedQuery.isLoading,
+    rejectedQuery.error as Error | null,
+    pages.rejected
+  );
 
   const updateVideoStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "aprovado" | "rejeitado" }) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return { id, status };
+    mutationFn: async ({ id, status, athleteUserId }: UpdateVideoStatusParams) => {
+      await updateMediaStatus(id, statusToDb(status));
+      return { id, status, athleteUserId };
     },
-    onSuccess: ({ id, status }) => {
-      queryClient.setQueryData<PendingVideo[]>(queryKeys.videos.all, (prev) =>
-        prev ? prev.map((v) => (v.id === id ? { ...v, status } : v)) : []
+    onSuccess: (
+      _,
+      { id, status, athleteUserId, pendingPage = pages.pending, video: videoItem }
+    ) => {
+      const targetStatus: "approved" | "rejected" = statusToDb(status);
+      queryClient.setQueryData<FetchVideoMediaResult>(
+        queryKeys.videos.listByStatus("pending", pendingPage, PAGE_SIZE),
+        (old) => {
+          if (!old) return old;
+          return {
+            items: old.items.filter((v) => v.id !== id),
+            totalCount: Math.max(0, old.totalCount - 1),
+          };
+        }
       );
+      if (videoItem) {
+        const resolvedItem: MediaVideoWithSignedUrls = {
+          ...videoItem,
+          status: targetStatus,
+        };
+        const key = queryKeys.videos.listByStatus(targetStatus, 0, PAGE_SIZE);
+        queryClient.setQueryData<FetchVideoMediaResult>(key, (old) => {
+          const list = old?.items ?? [];
+          return {
+            items: [resolvedItem, ...list],
+            totalCount: (old?.totalCount ?? 0) + 1,
+          };
+        });
+      }
+      if (admId) {
+        insertAdmLog({
+          admId,
+          userId: athleteUserId,
+          type: status === "aprovado" ? "media_approved" : "media_rejected",
+          metadata: { mediaId: id },
+        });
+      }
       toast({ title: status === "aprovado" ? "Vídeo aprovado" : "Vídeo rejeitado" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao atualizar vídeo", description: err.message, variant: "destructive" });
     },
   });
 
-  const pending = videos.filter((v) => v.status === "pendente");
-  const resolved = videos.filter((v) => v.status !== "pendente");
-
   return {
+    activeTab,
+    setActiveTab,
+    setPage,
     pending,
-    resolved,
-    isLoading,
-    error,
+    approved,
+    rejected,
     updateVideoStatusMutation,
   };
 }

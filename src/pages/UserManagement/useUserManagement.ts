@@ -1,109 +1,301 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchUsers, AppUser } from "@/data/mock";
+import { supabase } from "@/lib/supabase";
 import { queryKeys } from "@/lib/queryKeys";
+import { functions } from "@/lib/functions";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthStore } from "@/stores";
+import { insertAdmLog, fetchAdmLogsByUserId, fetchAdmLogsByAdmId } from "@/processes/admLogs";
+import type { ProfileRow } from "./types";
+
+const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 350;
+
+async function listProfilesForAdmin(
+	page: number,
+	pageSize: number,
+	search: string
+): Promise<{ rows: ProfileRow[]; totalCount: number }> {
+	const offset = page * pageSize;
+	const { data, error } = await supabase.rpc("list_profiles_for_admin", {
+		p_offset: offset,
+		p_limit: pageSize,
+		p_search: search.trim() || null,
+	});
+	if (error) throw error;
+	const rows = (data ?? []) as ProfileRow[];
+	const totalCount = rows[0]?.total_count ?? 0;
+	return { rows, totalCount };
+}
 
 export function useUserManagement() {
-  const queryClient = useQueryClient();
-  const { data: users = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.users.all,
-    queryFn: fetchUsers,
-  });
-  const [search, setSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const { toast } = useToast();
+	const queryClient = useQueryClient();
+	const userId = useAuthStore((s) => s.user?.id);
+	const [page, setPage] = useState(0);
+	const [search, setSearch] = useState("");
+	const [searchInput, setSearchInput] = useState("");
+	const [selectedUser, setSelectedUser] = useState<ProfileRow | null>(null);
+	const [newAdminEmail, setNewAdminEmail] = useState("");
+	const [createAdminModalOpen, setCreateAdminModalOpen] = useState(false);
+	const [historyUser, setHistoryUser] = useState<ProfileRow | null>(null);
+	const { toast } = useToast();
 
-  const filtered = users.filter(
-    (u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
-  );
+	useEffect(() => {
+		const t = setTimeout(() => {
+			setSearch(searchInput);
+			setPage(0);
+		}, SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(t);
+	}, [searchInput]);
 
-  const toggleBlockMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<AppUser[]>(queryKeys.users.all, (prev) =>
-        prev
-          ? prev.map((user) =>
-              user.id === id ? { ...user, status: user.status === "ativo" ? ("bloqueado" as const) : ("ativo" as const) } : user
-            )
-          : []
-      );
-      toast({ title: "Status atualizado" });
-    },
-  });
+	const listKey = queryKeys.users.list({ page, pageSize: PAGE_SIZE, search });
 
-  const removeValidationMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<AppUser[]>(queryKeys.users.all, (prev) =>
-        prev ? prev.map((user) => (user.id === id ? { ...user, validated: false } : user)) : []
-      );
-      toast({ title: "Validação removida" });
-    },
-  });
+	const {
+		data,
+		isLoading,
+		error,
+		isPlaceholderData,
+	} = useQuery({
+		queryKey: listKey,
+		queryFn: () => listProfilesForAdmin(page, PAGE_SIZE, search),
+		placeholderData: (prev) => prev,
+	});
 
-  const addValidationMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<AppUser[]>(queryKeys.users.all, (prev) =>
-        prev ? prev.map((user) => (user.id === id ? { ...user, validated: true } : user)) : []
-      );
-      toast({ title: "Conta validada" });
-    },
-  });
+	const rows = data?.rows ?? [];
+	const totalCount = data?.totalCount ?? 0;
+	const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  const createAdminMutation = useMutation({
-    mutationFn: async (email: string) => {
-      await new Promise((r) => setTimeout(r, 200));
-      return email;
-    },
-    onSuccess: (email) => {
-      const prev = queryClient.getQueryData<AppUser[]>(queryKeys.users.all) ?? [];
-      const newAdmin: AppUser = {
-        id: String(prev.length + 1),
-        name: email.split("@")[0],
-        email,
-        role: "admin",
-        status: "ativo",
-        createdAt: new Date().toISOString().split("T")[0],
-        validated: true,
-      };
-      queryClient.setQueryData<AppUser[]>(queryKeys.users.all, [...prev, newAdmin]);
-      setNewAdminEmail("");
-      toast({ title: "Admin criado" });
-    },
-  });
+	const setSearchInputOnly = useCallback((value: string) => {
+		setSearchInput(value);
+	}, []);
 
-  const createAdmin = () => {
-    if (!newAdminEmail) return;
-    createAdminMutation.mutate(newAdminEmail);
-  };
+	const toggleBlockMutation = useMutation({
+		mutationFn: async (targetUserId: string) => {
+			const { data: session } = await supabase.auth.getSession();
+			const token = session.session?.access_token;
+			if (!token) throw new Error("Não autenticado");
+			const current = rows.find((r) => r.id === targetUserId);
+			const banned = !!current?.banned_until && new Date(current.banned_until) > new Date();
+			const url = banned ? functions.adminUnblockUser : functions.adminBlockUser;
+			const res = await fetch(url, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+				body: JSON.stringify({ userId: targetUserId }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.message ?? res.statusText ?? "Erro ao atualizar status");
+			}
+			return { targetUserId, nowBlocked: !banned };
+		},
+		onSuccess: ({ targetUserId, nowBlocked }) => {
+			const newBannedUntil = nowBlocked
+				? new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString()
+				: null;
+			queryClient.setQueriesData<{ rows: ProfileRow[]; totalCount: number }>(
+				{ queryKey: ["users", "list"] },
+				(old) => {
+					if (!old) return old;
+					return {
+						...old,
+						rows: old.rows.map((r) =>
+							r.id === targetUserId ? { ...r, banned_until: newBannedUntil } : r
+						),
+					};
+				}
+			);
+			setSelectedUser((prev) =>
+				prev?.id === targetUserId ? { ...prev, banned_until: newBannedUntil } : prev
+			);
+			insertAdmLog({
+				admId: userId!,
+				userId: targetUserId,
+				type: nowBlocked ? "user_banned" : "user_unbanned",
+			});
+			toast({ title: "Status atualizado", variant: "success" });
+		},
+		onError: (err: Error) => {
+			toast({ title: "Erro", description: err.message, variant: "destructive" });
+		},
+	});
 
-  return {
-    filtered,
-    users,
-    isLoading,
-    error,
-    search,
-    setSearch,
-    selectedUser,
-    setSelectedUser,
-    newAdminEmail,
-    setNewAdminEmail,
-    toggleBlockMutation,
-    removeValidationMutation,
-    addValidationMutation,
-    createAdminMutation,
-    createAdmin,
-  };
+	const removeValidationMutation = useMutation({
+		mutationFn: async (athleteUserId: string) => {
+			const { error } = await supabase
+				.from("profile")
+				.update({ verified: false })
+				.eq("id", athleteUserId);
+			if (error) throw error;
+			return athleteUserId;
+		},
+		onSuccess: (athleteUserId) => {
+			queryClient.setQueriesData<{ rows: ProfileRow[]; totalCount: number }>(
+				{ queryKey: ["users", "list"] },
+				(old) => {
+					if (!old) return old;
+					return {
+						...old,
+						rows: old.rows.map((r) =>
+							r.id === athleteUserId ? { ...r, validated: false } : r
+						),
+					};
+				}
+			);
+			setSelectedUser((prev) =>
+				prev?.id === athleteUserId ? { ...prev, validated: false } : prev
+			);
+			insertAdmLog({
+				admId: userId!,
+				userId: athleteUserId,
+				type: "user_validation_removed",
+			});
+			toast({ title: "Validação removida", variant: "success" });
+		},
+		onError: (err: Error) => {
+			toast({ title: "Erro", description: err.message, variant: "destructive" });
+		},
+	});
+
+	const addValidationMutation = useMutation({
+		mutationFn: async (athleteUserId: string) => {
+			if (!userId) throw new Error("Não autenticado");
+			const { error } = await supabase
+				.from("profile")
+				.update({ verified: true })
+				.eq("id", athleteUserId);
+			if (error) throw error;
+			return athleteUserId;
+		},
+		onSuccess: (athleteUserId) => {
+			queryClient.setQueriesData<{ rows: ProfileRow[]; totalCount: number }>(
+				{ queryKey: ["users", "list"] },
+				(old) => {
+					if (!old) return old;
+					return {
+						...old,
+						rows: old.rows.map((r) =>
+							r.id === athleteUserId ? { ...r, validated: true } : r
+						),
+					};
+				}
+			);
+			setSelectedUser((prev) =>
+				prev?.id === athleteUserId ? { ...prev, validated: true } : prev
+			);
+			insertAdmLog({
+				admId: userId!,
+				userId: athleteUserId,
+				type: "user_validated",
+			});
+			toast({ title: "Conta validada", variant: "success" });
+		},
+		onError: (err: Error) => {
+			toast({ title: "Erro", description: err.message, variant: "destructive" });
+		},
+	});
+
+	const createAdminMutation = useMutation({
+		mutationFn: async (email: string) => {
+			const { data: session } = await supabase.auth.getSession();
+			const token = session.session?.access_token;
+			if (!token) throw new Error("Não autenticado");
+			const res = await fetch(functions.adminCreateAdmin, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+				body: JSON.stringify({ email }),
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) throw new Error((data as { message?: string }).message ?? "Erro ao convidar admin");
+			return { email, userId: (data as { userId?: string }).userId } as { email: string; userId: string };
+		},
+		onSuccess: (result) => {
+			const newRow: ProfileRow = {
+				id: result.userId,
+				email: result.email,
+				name: result.email.split("@")[0] || "",
+				role: "admin",
+				created_at: new Date().toISOString(),
+				phone: null,
+				city: null,
+				state: null,
+				birth_date: null,
+				banned_until: null,
+				validated: false,
+				total_count: 0,
+			};
+			queryClient.setQueryData<{ rows: ProfileRow[]; totalCount: number }>(listKey, (prev) => {
+				if (!prev) return prev;
+				const nextRows = [newRow, ...prev.rows].slice(0, PAGE_SIZE);
+				const nextTotal = prev.totalCount + 1;
+				return {
+					rows: nextRows.map((r) => ({ ...r, total_count: nextTotal })),
+					totalCount: nextTotal,
+				};
+			});
+			setNewAdminEmail("");
+			setCreateAdminModalOpen(false);
+			insertAdmLog({
+				admId: userId!,
+				userId: result.userId,
+				type: "user_created",
+				metadata: { email: result.email, role: "admin" },
+			});
+			toast({ title: "Convite enviado com sucesso", variant: "success" });
+		},
+		onError: () => {
+			toast({
+				title: "Não foi possível criar o administrador.",
+				variant: "destructive",
+			});
+		},
+	});
+
+	const createAdmin = () => {
+		if (!newAdminEmail.trim()) return;
+		createAdminMutation.mutate(newAdminEmail.trim());
+	};
+
+	const isHistoryUserAdmin = historyUser?.role === "admin";
+	const {
+		data: historyLogs = [],
+		isLoading: historyLogsLoading,
+	} = useQuery({
+		queryKey: ["adm_logs", historyUser?.id ?? "", isHistoryUserAdmin],
+		queryFn: () =>
+			isHistoryUserAdmin
+				? fetchAdmLogsByAdmId(historyUser!.id)
+				: fetchAdmLogsByUserId(historyUser!.id),
+		enabled: !!historyUser?.id,
+		staleTime: 0,
+		refetchOnMount: "always",
+	});
+
+	return {
+		rows,
+		totalCount,
+		totalPages,
+		page,
+		setPage,
+		pageSize: PAGE_SIZE,
+		isLoading,
+		error: error as Error | null,
+		search: searchInput,
+		setSearch: setSearchInputOnly,
+		createAdminModalOpen,
+		setCreateAdminModalOpen,
+		selectedUser,
+		setSelectedUser,
+		newAdminEmail,
+		setNewAdminEmail,
+		toggleBlockMutation,
+		removeValidationMutation,
+		addValidationMutation,
+		createAdminMutation,
+		createAdmin,
+		isPlaceholderData,
+		historyUser,
+		setHistoryUser,
+		historyLogs,
+		historyLogsLoading,
+	};
 }
