@@ -3,39 +3,38 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Ban, XCircle, Loader2 } from "lucide-react";
+import { Trash2, Check, Gavel, Loader2 } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 const statusColors: Record<Report["status"], string> = {
-  pending: "bg-warning/15 text-warning border-warning/30",
-  content_removed: "bg-success/15 text-success border-success/30",
-  user_blocked: "bg-success/15 text-success border-success/30",
-  rejected: "bg-destructive/15 text-destructive border-destructive/30",
+  open: "bg-warning/15 text-warning border-warning/30",
+  reviewed: "bg-muted text-muted-foreground border-border",
+  actioned: "bg-success/15 text-success border-success/30",
 };
 
 const statusLabels: Record<Report["status"], string> = {
-  pending: "Pendente",
-  content_removed: "Conteúdo removido",
-  user_blocked: "Usuário bloqueado",
-  rejected: "Rejeitada",
+  open: "Aberta",
+  reviewed: "Revisada",
+  actioned: "Acionada",
 };
 
-const typeLabels: Record<Report["type"], string> = {
-  video: "Vídeo",
-  profile: "Perfil",
-  validation: "Validação",
+const reasonLabels: Record<Report["reason"], string> = {
+  spam: "Spam",
+  nudity_or_violence: "Nudez ou violência",
+  harassment_or_bullying: "Assédio ou bullying",
+  fake_profile: "Perfil falso",
+  other: "Outro",
 };
 
 export interface ReportsProps {
-  reportsPending: Report[];
-  reportsContentRemoved: Report[];
-  reportsUserBlocked: Report[];
-  reportsRejected: Report[];
+  reportsOpen: Report[];
+  reportsReviewed: Report[];
+  reportsActioned: Report[];
   isLoading: boolean;
   error: Error | null;
-  removeContentMutation: UseMutationResult<void, Error, Report, unknown>;
-  removeReportMutation: UseMutationResult<void, Error, Report, unknown>;
-  blockUserMutation: UseMutationResult<void, Error, Report, unknown>;
+  markReviewedMutation: UseMutationResult<void, Error, Report, unknown>;
+  markActionedMutation: UseMutationResult<void, Error, Report, unknown>;
+  deleteReportMutation: UseMutationResult<void, Error, Report, unknown>;
 }
 
 const listEmpty = (
@@ -45,69 +44,73 @@ const listEmpty = (
 function ReportCard({
   report,
   canAct,
-  removeContentMutation,
-  removeReportMutation,
-  blockUserMutation,
+  markReviewedMutation,
+  markActionedMutation,
+  deleteReportMutation,
 }: {
   report: Report;
   canAct: boolean;
-  removeContentMutation: ReportsProps["removeContentMutation"];
-  removeReportMutation: ReportsProps["removeReportMutation"];
-  blockUserMutation: ReportsProps["blockUserMutation"];
+  markReviewedMutation: ReportsProps["markReviewedMutation"];
+  markActionedMutation: ReportsProps["markActionedMutation"];
+  deleteReportMutation: ReportsProps["deleteReportMutation"];
 }) {
   return (
-    <Card key={report.id} className="border-border/50">
+    <Card className="border-border/50">
       <CardContent className="flex items-center justify-between p-5">
         <div className="flex flex-col gap-1.5 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs font-medium">
-              {typeLabels[report.type]}
+              {report.hasMedia ? "Vídeo" : "Perfil"}
             </Badge>
             <Badge variant="outline" className={statusColors[report.status]}>
               {statusLabels[report.status]}
             </Badge>
           </div>
-          <p className="font-medium">{report.reason}</p>
+          <p className="font-medium">{reasonLabels[report.reason]}</p>
+          {report.details && (
+            <p className="text-sm text-muted-foreground">{report.details}</p>
+          )}
           <p className="text-sm text-muted-foreground">
-            Denunciado: <span className="text-foreground">{report.reportedUser}</span> · por{" "}
-            {report.reportedBy} · {report.createdAt}
+            Denunciado: <span className="text-foreground">{report.reportedUser}</span>
+            {report.mediaTitle ? ` · ${report.mediaTitle}` : ""} · por {report.reportedBy} ·{" "}
+            {report.createdAt}
           </p>
         </div>
 
         <div className="flex items-center gap-2 ml-4">
-          {canAct && report.status === "pending" && (
+          {canAct && report.status === "open" && (
             <>
-              {report.type !== "profile" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => removeContentMutation.mutate(report)}
-                  disabled={removeContentMutation.isPending}
-                  title="Remover conteúdo"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => removeReportMutation.mutate(report)}
-                disabled={removeReportMutation.isPending}
-                title="Remover denúncia"
+                onClick={() => markReviewedMutation.mutate(report)}
+                disabled={markReviewedMutation.isPending}
+                title="Marcar como revisada"
               >
-                <XCircle className="h-4 w-4" />
+                <Check className="h-4 w-4" />
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-destructive hover:bg-destructive/10"
-                onClick={() => blockUserMutation.mutate(report)}
-                disabled={blockUserMutation.isPending}
-                title="Bloquear usuário"
+                onClick={() => markActionedMutation.mutate(report)}
+                disabled={markActionedMutation.isPending}
+                title="Marcar como acionada"
               >
-                <Ban className="h-4 w-4" />
+                <Gavel className="h-4 w-4" />
               </Button>
             </>
+          )}
+          {canAct && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:bg-destructive/10"
+              onClick={() => deleteReportMutation.mutate(report)}
+              disabled={deleteReportMutation.isPending}
+              title="Excluir denúncia"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </CardContent>
@@ -116,15 +119,14 @@ function ReportCard({
 }
 
 export function Reports({
-  reportsPending,
-  reportsContentRemoved,
-  reportsUserBlocked,
-  reportsRejected,
+  reportsOpen,
+  reportsReviewed,
+  reportsActioned,
   isLoading,
   error,
-  removeContentMutation,
-  removeReportMutation,
-  blockUserMutation,
+  markReviewedMutation,
+  markActionedMutation,
+  deleteReportMutation,
 }: ReportsProps) {
   if (isLoading) {
     return (
@@ -142,6 +144,11 @@ export function Reports({
     );
   }
 
+  const isMutating =
+    markReviewedMutation.isPending ||
+    markActionedMutation.isPending ||
+    deleteReportMutation.isPending;
+
   const renderList = (reports: Report[], canAct: boolean) =>
     reports.length === 0
       ? listEmpty
@@ -150,11 +157,22 @@ export function Reports({
             key={report.id}
             report={report}
             canAct={canAct}
-            removeContentMutation={removeContentMutation}
-            removeReportMutation={removeReportMutation}
-            blockUserMutation={blockUserMutation}
+            markReviewedMutation={markReviewedMutation}
+            markActionedMutation={markActionedMutation}
+            deleteReportMutation={deleteReportMutation}
           />
         ));
+
+  const renderTab = (reports: Report[], canAct: boolean) => (
+    <div className="relative mt-4">
+      {isMutating ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-[1px] min-h-[200px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : null}
+      <div className="grid gap-4">{renderList(reports, canAct)}</div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -165,34 +183,15 @@ export function Reports({
         </p>
       </div>
 
-      <Tabs defaultValue="pendentes" className="w-full">
+      <Tabs defaultValue="abertas" className="w-full">
         <TabsList>
-          <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
-          <TabsTrigger value="conteudo_removido">Conteúdo removido</TabsTrigger>
-          <TabsTrigger value="usuario_bloqueado">Usuário bloqueado</TabsTrigger>
-          <TabsTrigger value="rejeitadas">Rejeitadas</TabsTrigger>
+          <TabsTrigger value="abertas">Abertas</TabsTrigger>
+          <TabsTrigger value="revisadas">Revisadas</TabsTrigger>
+          <TabsTrigger value="acionadas">Acionadas</TabsTrigger>
         </TabsList>
-        <TabsContent value="pendentes" className="relative mt-4">
-          {removeContentMutation.isPending ||
-          removeReportMutation.isPending ||
-          blockUserMutation.isPending ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-[1px] min-h-[200px]">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : null}
-          <div className="grid gap-4">
-            {renderList(reportsPending, true)}
-          </div>
-        </TabsContent>
-        <TabsContent value="conteudo_removido" className="mt-4">
-          <div className="grid gap-4">{renderList(reportsContentRemoved, false)}</div>
-        </TabsContent>
-        <TabsContent value="usuario_bloqueado" className="mt-4">
-          <div className="grid gap-4">{renderList(reportsUserBlocked, false)}</div>
-        </TabsContent>
-        <TabsContent value="rejeitadas" className="mt-4">
-          <div className="grid gap-4">{renderList(reportsRejected, false)}</div>
-        </TabsContent>
+        <TabsContent value="abertas">{renderTab(reportsOpen, true)}</TabsContent>
+        <TabsContent value="revisadas">{renderTab(reportsReviewed, true)}</TabsContent>
+        <TabsContent value="acionadas">{renderTab(reportsActioned, true)}</TabsContent>
       </Tabs>
     </div>
   );

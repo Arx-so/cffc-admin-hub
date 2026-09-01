@@ -1,29 +1,32 @@
-export type ReportStatus =
-  | "pending"
-  | "content_removed"
-  | "user_blocked"
-  | "rejected";
+export type ReportStatus = "open" | "reviewed" | "actioned";
 
-export type ReportTargetType = "video" | "profile" | "validation";
+export type ReportReason =
+  | "spam"
+  | "nudity_or_violence"
+  | "harassment_or_bullying"
+  | "fake_profile"
+  | "other";
 
 export interface ReportRow {
   id: string;
-  reporter_user_id: string;
-  target_type: ReportTargetType;
-  target_id: string;
-  reason: string;
-  created_at: string;
+  reporter_id: string;
+  reported_user_id: string;
+  media_id: string | null;
+  reason: ReportReason;
+  details: string | null;
   status: ReportStatus;
+  created_at: string;
 }
 
 export interface Report {
   id: string;
-  type: ReportTargetType;
-  reason: string;
+  reason: ReportReason;
+  details: string | null;
   status: ReportStatus;
   reportedUser: string;
+  reportedUserId: string;
   reportedBy: string;
+  hasMedia: boolean;
+  mediaTitle: string | null;
   createdAt: string;
-  /** Set when target_type === "profile" for adm_logs.user_id */
-  targetUserId?: string;
 }

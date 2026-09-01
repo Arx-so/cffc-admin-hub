@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchReportsByStatus, updateReportStatus, deleteReport } from "@/processes/reports";
 import { insertAdmLog } from "@/processes/admLogs";
-import type { Report } from "@/types/report";
+import type { Report, ReportStatus } from "@/types/report";
 import { queryKeys } from "@/lib/queryKeys";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/stores";
@@ -11,175 +11,129 @@ export function useReports() {
   const admId = useAuthStore((s) => s.user?.id);
   const { toast } = useToast();
 
-  const pending = useQuery({
-    queryKey: queryKeys.reports.byStatus("pending"),
-    queryFn: () => fetchReportsByStatus("pending"),
+  const open = useQuery({
+    queryKey: queryKeys.reports.byStatus("open"),
+    queryFn: () => fetchReportsByStatus("open"),
   });
-  const contentRemoved = useQuery({
-    queryKey: queryKeys.reports.byStatus("content_removed"),
-    queryFn: () => fetchReportsByStatus("content_removed"),
+  const reviewed = useQuery({
+    queryKey: queryKeys.reports.byStatus("reviewed"),
+    queryFn: () => fetchReportsByStatus("reviewed"),
   });
-  const userBlocked = useQuery({
-    queryKey: queryKeys.reports.byStatus("user_blocked"),
-    queryFn: () => fetchReportsByStatus("user_blocked"),
-  });
-  const rejected = useQuery({
-    queryKey: queryKeys.reports.byStatus("rejected"),
-    queryFn: () => fetchReportsByStatus("rejected"),
+  const actioned = useQuery({
+    queryKey: queryKeys.reports.byStatus("actioned"),
+    queryFn: () => fetchReportsByStatus("actioned"),
   });
 
-  const reportsPending = pending.data ?? [];
-  const reportsContentRemoved = contentRemoved.data ?? [];
-  const reportsUserBlocked = userBlocked.data ?? [];
-  const reportsRejected = rejected.data ?? [];
+  const reportsOpen = open.data ?? [];
+  const reportsReviewed = reviewed.data ?? [];
+  const reportsActioned = actioned.data ?? [];
 
-  const isLoading =
-    pending.isLoading ||
-    contentRemoved.isLoading ||
-    userBlocked.isLoading ||
-    rejected.isLoading;
-  const error =
-    pending.error ?? contentRemoved.error ?? userBlocked.error ?? rejected.error;
+  const isLoading = open.isLoading || reviewed.isLoading || actioned.isLoading;
+  const error = open.error ?? reviewed.error ?? actioned.error;
 
   const invalidateReports = () =>
-    queryClient.invalidateQueries({ queryKey: ["reports"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
 
   type ReportsCache = {
-    prevPending?: Report[];
-    prevContentRemoved?: Report[];
-    prevUserBlocked?: Report[];
-    prevRejected?: Report[];
+    prevOpen?: Report[];
+    prevReviewed?: Report[];
+    prevActioned?: Report[];
   };
 
   const rollbackReports = (ctx: ReportsCache | undefined) => {
     if (!ctx) return;
-    if (ctx.prevPending !== undefined)
-      queryClient.setQueryData(queryKeys.reports.byStatus("pending"), ctx.prevPending);
-    if (ctx.prevContentRemoved !== undefined)
-      queryClient.setQueryData(queryKeys.reports.byStatus("content_removed"), ctx.prevContentRemoved);
-    if (ctx.prevUserBlocked !== undefined)
-      queryClient.setQueryData(queryKeys.reports.byStatus("user_blocked"), ctx.prevUserBlocked);
-    if (ctx.prevRejected !== undefined)
-      queryClient.setQueryData(queryKeys.reports.byStatus("rejected"), ctx.prevRejected);
+    if (ctx.prevOpen !== undefined)
+      queryClient.setQueryData(queryKeys.reports.byStatus("open"), ctx.prevOpen);
+    if (ctx.prevReviewed !== undefined)
+      queryClient.setQueryData(queryKeys.reports.byStatus("reviewed"), ctx.prevReviewed);
+    if (ctx.prevActioned !== undefined)
+      queryClient.setQueryData(queryKeys.reports.byStatus("actioned"), ctx.prevActioned);
   };
 
-  const removeContentMutation = useMutation({
-    mutationFn: (report: Report) =>
-      updateReportStatus(report.id, "content_removed"),
-    onMutate: async (report) => {
-      await queryClient.cancelQueries({ queryKey: ["reports"] });
-      const prevPending = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("pending"));
-      const prevContentRemoved = queryClient.getQueryData<Report[]>(
-        queryKeys.reports.byStatus("content_removed")
-      );
-      const moved = { ...report, status: "content_removed" as const };
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("pending"),
-        (prevPending ?? []).filter((r) => r.id !== report.id)
-      );
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("content_removed"),
-        [moved, ...(prevContentRemoved ?? [])]
-      );
-      return { prevPending, prevContentRemoved };
-    },
+  const moveFromOpen = async (report: Report, target: Exclude<ReportStatus, "open">) => {
+    await queryClient.cancelQueries({ queryKey: queryKeys.reports.all });
+    const prevOpen = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("open"));
+    const targetKey = queryKeys.reports.byStatus(target);
+    const prevTarget = queryClient.getQueryData<Report[]>(targetKey);
+    queryClient.setQueryData(
+      queryKeys.reports.byStatus("open"),
+      (prevOpen ?? []).filter((r) => r.id !== report.id)
+    );
+    queryClient.setQueryData(targetKey, [{ ...report, status: target }, ...(prevTarget ?? [])]);
+    return target === "reviewed"
+      ? { prevOpen, prevReviewed: prevTarget }
+      : { prevOpen, prevActioned: prevTarget };
+  };
+
+  const logHandled = (report: Report, status: ReportStatus) => {
+    if (!admId) return;
+    void insertAdmLog({
+      admId,
+      userId: report.reportedUserId,
+      type: "report_handled",
+      metadata: { reportId: report.id, status },
+    }).catch(() => {});
+  };
+
+  const markReviewedMutation = useMutation({
+    mutationFn: (report: Report) => updateReportStatus(report.id, "reviewed"),
+    onMutate: (report) => moveFromOpen(report, "reviewed"),
     onError: (_err, _report, context) => {
       rollbackReports(context);
-      toast({ title: "Erro ao remover conteúdo", variant: "destructive" });
+      toast({ title: "Erro ao marcar como revisada", variant: "destructive" });
     },
     onSuccess: (_data, report) => {
       invalidateReports();
-      if (admId)
-        void insertAdmLog({
-          admId,
-          userId: report.targetUserId,
-          type: "report_handled",
-          metadata: { reportId: report.id, status: "content_removed" },
-        }).catch(() => {});
-      toast({ title: "Conteúdo removido" });
+      logHandled(report, "reviewed");
+      toast({ title: "Denúncia marcada como revisada" });
     },
   });
 
-  const removeReportMutation = useMutation({
+  const markActionedMutation = useMutation({
+    mutationFn: (report: Report) => updateReportStatus(report.id, "actioned"),
+    onMutate: (report) => moveFromOpen(report, "actioned"),
+    onError: (_err, _report, context) => {
+      rollbackReports(context);
+      toast({ title: "Erro ao marcar como acionada", variant: "destructive" });
+    },
+    onSuccess: (_data, report) => {
+      invalidateReports();
+      logHandled(report, "actioned");
+      toast({ title: "Denúncia marcada como acionada" });
+    },
+  });
+
+  const deleteReportMutation = useMutation({
     mutationFn: (report: Report) => deleteReport(report.id),
     onMutate: async (report) => {
-      await queryClient.cancelQueries({ queryKey: ["reports"] });
-      const prevPending = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("pending"));
-      const prevRejected = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("rejected"));
-      const moved = { ...report, status: "rejected" as const };
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("pending"),
-        (prevPending ?? []).filter((r) => r.id !== report.id)
-      );
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("rejected"),
-        [moved, ...(prevRejected ?? [])]
-      );
-      return { prevPending, prevRejected };
+      await queryClient.cancelQueries({ queryKey: queryKeys.reports.all });
+      const prevOpen = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("open"));
+      const prevReviewed = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("reviewed"));
+      const prevActioned = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("actioned"));
+      const drop = (list: Report[] | undefined) => (list ?? []).filter((r) => r.id !== report.id);
+      queryClient.setQueryData(queryKeys.reports.byStatus("open"), drop(prevOpen));
+      queryClient.setQueryData(queryKeys.reports.byStatus("reviewed"), drop(prevReviewed));
+      queryClient.setQueryData(queryKeys.reports.byStatus("actioned"), drop(prevActioned));
+      return { prevOpen, prevReviewed, prevActioned };
     },
     onError: (_err, _report, context) => {
       rollbackReports(context);
-      toast({ title: "Erro ao remover denúncia", variant: "destructive" });
+      toast({ title: "Erro ao excluir denúncia", variant: "destructive" });
     },
-    onSuccess: (_data, report) => {
+    onSuccess: () => {
       invalidateReports();
-      if (admId)
-        void insertAdmLog({
-          admId,
-          userId: report.targetUserId,
-          type: "report_handled",
-          metadata: { reportId: report.id, status: "rejected" },
-        }).catch(() => {});
-      toast({ title: "Denúncia removida" });
-    },
-  });
-
-  const blockUserMutation = useMutation({
-    mutationFn: (report: Report) =>
-      updateReportStatus(report.id, "user_blocked"),
-    onMutate: async (report) => {
-      await queryClient.cancelQueries({ queryKey: ["reports"] });
-      const prevPending = queryClient.getQueryData<Report[]>(queryKeys.reports.byStatus("pending"));
-      const prevUserBlocked = queryClient.getQueryData<Report[]>(
-        queryKeys.reports.byStatus("user_blocked")
-      );
-      const moved = { ...report, status: "user_blocked" as const };
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("pending"),
-        (prevPending ?? []).filter((r) => r.id !== report.id)
-      );
-      queryClient.setQueryData(
-        queryKeys.reports.byStatus("user_blocked"),
-        [moved, ...(prevUserBlocked ?? [])]
-      );
-      return { prevPending, prevUserBlocked };
-    },
-    onError: (_err, _report, context) => {
-      rollbackReports(context);
-      toast({ title: "Erro ao bloquear usuário", variant: "destructive" });
-    },
-    onSuccess: (_data, report) => {
-      invalidateReports();
-      if (admId)
-        void insertAdmLog({
-          admId,
-          userId: report.targetUserId,
-          type: "report_handled",
-          metadata: { reportId: report.id, status: "user_blocked" },
-        }).catch(() => {});
-      toast({ title: "Usuário bloqueado" });
+      toast({ title: "Denúncia excluída" });
     },
   });
 
   return {
-    reportsPending,
-    reportsContentRemoved,
-    reportsUserBlocked,
-    reportsRejected,
+    reportsOpen,
+    reportsReviewed,
+    reportsActioned,
     isLoading,
     error: error as Error | null,
-    removeContentMutation,
-    removeReportMutation,
-    blockUserMutation,
+    markReviewedMutation,
+    markActionedMutation,
+    deleteReportMutation,
   };
 }
