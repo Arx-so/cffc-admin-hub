@@ -10,6 +10,8 @@ import type {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { VideoPreview } from "@/components/VideoPreview";
 import { VideoPlayerDialog, type PlayingVideo } from "@/components/VideoPlayerDialog";
@@ -34,6 +36,9 @@ export interface VideosProps {
   rejected: TabListState;
   updateVideoStatusMutation: UseMutationResult<void, Error, UpdateVideoStatusParams, unknown>;
   deleteVideoMutation: UseMutationResult<void, Error, DeleteVideoParams, unknown>;
+  autoModerationEnabled: boolean;
+  isModerationSettingsLoading: boolean;
+  toggleAutoModerationMutation: UseMutationResult<boolean, Error, boolean, unknown>;
 }
 
 type PendingAction = {
@@ -41,6 +46,8 @@ type PendingAction = {
   status: VideoStatusAction;
   athleteUserId: string;
   athleteName: string;
+  sourceTab: VideoTab;
+  sourcePage: number;
 } | null;
 type PendingDelete = {
   id: string;
@@ -145,6 +152,9 @@ export function Videos({
   rejected,
   updateVideoStatusMutation,
   deleteVideoMutation,
+  autoModerationEnabled,
+  isModerationSettingsLoading,
+  toggleAutoModerationMutation,
 }: VideosProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
@@ -152,10 +162,32 @@ export function Videos({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Vídeos em Análise</h1>
-        <p className="text-muted-foreground mt-1">Analise e aprove vídeos dos atletas</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Vídeos em Análise</h1>
+          <p className="text-muted-foreground mt-1">Analise e aprove vídeos dos atletas</p>
+        </div>
+        <div className="flex items-center gap-2 border rounded-lg px-3 py-2">
+          <Switch
+            id="auto-moderation-toggle"
+            checked={autoModerationEnabled}
+            onCheckedChange={(checked) => toggleAutoModerationMutation.mutate(checked)}
+            disabled={isModerationSettingsLoading || toggleAutoModerationMutation.isPending}
+          />
+          <Label htmlFor="auto-moderation-toggle" className="cursor-pointer">
+            Moderação automática {autoModerationEnabled ? "ativada" : "desativada"}
+          </Label>
+        </div>
       </div>
+      {!autoModerationEnabled && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning-foreground">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
+          <p>
+            A moderação automática está desativada: todo vídeo novo é aprovado e publicado
+            imediatamente, sem nenhuma checagem.
+          </p>
+        </div>
+      )}
 
       <Tabs
         value={activeTab}
@@ -218,6 +250,8 @@ export function Videos({
                               status: "aprovado",
                               athleteUserId: video.athlete_user_id,
                               athleteName: video.athleteName,
+                              sourceTab: "pending",
+                              sourcePage: pending.page,
                             })
                           }
                           disabled={updateVideoStatusMutation.isPending}
@@ -234,6 +268,8 @@ export function Videos({
                               status: "rejeitado",
                               athleteUserId: video.athlete_user_id,
                               athleteName: video.athleteName,
+                              sourceTab: "pending",
+                              sourcePage: pending.page,
                             })
                           }
                           disabled={updateVideoStatusMutation.isPending}
@@ -316,21 +352,45 @@ export function Videos({
                           {video.auto_status === "approved" && (
                             <Badge variant="outline">Automático</Badge>
                           )}
+                          {video.auto_status === "skipped" && (
+                            <Badge variant="outline">Sem checagem (moderação desativada)</Badge>
+                          )}
                         </div>
-                        <DeleteButton
-                          onClick={() =>
-                            setPendingDelete({
-                              id: video.id,
-                              url: video.url,
-                              thumbUrl: video.thumb_url,
-                              athleteUserId: video.athlete_user_id,
-                              athleteName: video.athleteName,
-                              tab: "approved",
-                              page: approved.page,
-                            })
-                          }
-                          disabled={deleteVideoMutation.isPending}
-                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={() =>
+                              setPendingAction({
+                                id: video.id,
+                                status: "rejeitado",
+                                athleteUserId: video.athlete_user_id,
+                                athleteName: video.athleteName,
+                                sourceTab: "approved",
+                                sourcePage: approved.page,
+                              })
+                            }
+                            disabled={updateVideoStatusMutation.isPending}
+                            title="Desaprovar vídeo"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                          <DeleteButton
+                            onClick={() =>
+                              setPendingDelete({
+                                id: video.id,
+                                url: video.url,
+                                thumbUrl: video.thumb_url,
+                                athleteUserId: video.athlete_user_id,
+                                athleteName: video.athleteName,
+                                tab: "approved",
+                                page: approved.page,
+                              })
+                            }
+                            disabled={deleteVideoMutation.isPending}
+                          />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -389,20 +449,40 @@ export function Videos({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant="destructive">Rejeitado</Badge>
-                        <DeleteButton
-                          onClick={() =>
-                            setPendingDelete({
-                              id: video.id,
-                              url: video.url,
-                              thumbUrl: video.thumb_url,
-                              athleteUserId: video.athlete_user_id,
-                              athleteName: video.athleteName,
-                              tab: "rejected",
-                              page: rejected.page,
-                            })
-                          }
-                          disabled={deleteVideoMutation.isPending}
-                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-success hover:bg-success/90 text-success-foreground"
+                            onClick={() =>
+                              setPendingAction({
+                                id: video.id,
+                                status: "aprovado",
+                                athleteUserId: video.athlete_user_id,
+                                athleteName: video.athleteName,
+                                sourceTab: "rejected",
+                                sourcePage: rejected.page,
+                              })
+                            }
+                            disabled={updateVideoStatusMutation.isPending}
+                            title="Aprovar vídeo"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <DeleteButton
+                            onClick={() =>
+                              setPendingDelete({
+                                id: video.id,
+                                url: video.url,
+                                thumbUrl: video.thumb_url,
+                                athleteUserId: video.athlete_user_id,
+                                athleteName: video.athleteName,
+                                tab: "rejected",
+                                page: rejected.page,
+                              })
+                            }
+                            disabled={deleteVideoMutation.isPending}
+                          />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -443,13 +523,20 @@ export function Videos({
         loading={updateVideoStatusMutation.isPending}
         onConfirm={() => {
           if (!pendingAction) return;
+          const sourceItems =
+            pendingAction.sourceTab === "pending"
+              ? pending.items
+              : pendingAction.sourceTab === "approved"
+                ? approved.items
+                : rejected.items;
           updateVideoStatusMutation.mutate(
             {
               id: pendingAction.id,
               status: pendingAction.status,
               athleteUserId: pendingAction.athleteUserId,
-              pendingPage: pending.page,
-              video: pending.items.find((v) => v.id === pendingAction.id),
+              sourceTab: pendingAction.sourceTab,
+              sourcePage: pendingAction.sourcePage,
+              video: sourceItems.find((v) => v.id === pendingAction.id),
             },
             { onSuccess: () => setPendingAction(null) }
           );

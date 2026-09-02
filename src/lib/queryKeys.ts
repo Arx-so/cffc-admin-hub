@@ -12,6 +12,7 @@ export const queryKeys = {
       ["videos", "list", status, page, pageSize] as const,
     pending: ["videos", "pending"] as const,
   },
+  moderationSettings: ["moderationSettings"] as const,
   validations: {
     all: ["validations"] as const,
     byStatus: (status: "pending" | "approved" | "rejected") => ["validations", status] as const,

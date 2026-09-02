@@ -148,6 +148,26 @@ Deno.serve(async (req: Request) => {
   }
   const supabase = createClient(url, serviceRole, { auth: { persistSession: false } });
 
+  const { data: settings } = await supabase
+    .from("moderation_settings")
+    .select("auto_moderation_enabled")
+    .eq("id", 1)
+    .single();
+
+  if (settings?.auto_moderation_enabled === false) {
+    const { error } = await supabase
+      .from("media")
+      .update({
+        status: "approved",
+        auto_status: "skipped",
+        auto_flags: [],
+        auto_checked_at: new Date().toISOString(),
+      })
+      .eq("id", record.id);
+    if (error) return jsonResponse({ message: error.message }, 500);
+    return jsonResponse({ decision: "skipped" }, 200);
+  }
+
   const storage = await fetchStorageObjectInfo(supabase, record.url);
   const history = await fetchUploadHistory(supabase, record, storage);
   const flags = evaluate(record, storage, history);

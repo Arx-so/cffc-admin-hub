@@ -3,7 +3,7 @@ export type MediaType = "document" | "image" | "video";
 export type MediaStatus = "pending" | "approved" | "rejected";
 
 /** Result of the script-based auto-moderation check. null = not yet checked. */
-export type MediaAutoStatus = "approved" | "flagged" | null;
+export type MediaAutoStatus = "approved" | "flagged" | "skipped" | null;
 
 export interface MediaAutoFlag {
   code: string;

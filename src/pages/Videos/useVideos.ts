@@ -6,6 +6,7 @@ import {
   deleteMedia,
   type FetchVideoMediaResult,
 } from "@/processes/media";
+import { fetchModerationSettings, updateAutoModerationEnabled } from "@/processes/moderationSettings";
 import { insertAdmLog } from "@/processes/admLogs";
 import type { MediaVideoWithSignedUrls } from "@/types/media";
 import { queryKeys } from "@/lib/queryKeys";
@@ -31,9 +32,11 @@ export interface UpdateVideoStatusParams {
   id: string;
   status: VideoStatusAction;
   athleteUserId: string;
-  /** Página atual da lista pendente (para atualizar o cache correto) */
-  pendingPage?: number;
-  /** Vídeo completo para adicionar à lista aprovados/rejeitados no cache */
+  /** Aba de onde a ação partiu (para atualizar o cache correto) */
+  sourceTab: VideoTab;
+  /** Página atual da aba de origem */
+  sourcePage: number;
+  /** Vídeo completo para adicionar à lista de destino no cache */
   video?: MediaVideoWithSignedUrls;
 }
 
@@ -130,11 +133,11 @@ export function useVideos() {
     },
     onSuccess: (
       _,
-      { id, status, athleteUserId, pendingPage = pages.pending, video: videoItem }
+      { id, status, athleteUserId, sourceTab, sourcePage, video: videoItem }
     ) => {
       const targetStatus: "approved" | "rejected" = statusToDb(status);
       queryClient.setQueryData<FetchVideoMediaResult>(
-        queryKeys.videos.listByStatus("pending", pendingPage, PAGE_SIZE),
+        queryKeys.videos.listByStatus(sourceTab, sourcePage, PAGE_SIZE),
         (old) => {
           if (!old) return old;
           return {
@@ -169,6 +172,38 @@ export function useVideos() {
     },
     onError: (err: Error) => {
       toast({ title: "Erro ao atualizar vídeo", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const moderationSettingsQuery = useQuery({
+    queryKey: queryKeys.moderationSettings,
+    queryFn: fetchModerationSettings,
+  });
+
+  const toggleAutoModerationMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!admId) throw new Error("Usuário não autenticado");
+      await updateAutoModerationEnabled(enabled, admId);
+      return enabled;
+    },
+    onSuccess: (enabled) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.moderationSettings });
+      if (admId) {
+        insertAdmLog({
+          admId,
+          type: "moderation_settings_updated",
+          metadata: { autoModerationEnabled: enabled },
+        });
+      }
+      toast({
+        title: enabled ? "Moderação automática ativada" : "Moderação automática desativada",
+        description: enabled
+          ? "Novos vídeos voltarão a passar pelas checagens automáticas."
+          : "Novos vídeos serão aprovados automaticamente, sem checagens.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao atualizar moderação automática", description: err.message, variant: "destructive" });
     },
   });
 
@@ -212,5 +247,8 @@ export function useVideos() {
     rejected,
     updateVideoStatusMutation,
     deleteVideoMutation,
+    autoModerationEnabled: moderationSettingsQuery.data?.autoModerationEnabled ?? true,
+    isModerationSettingsLoading: moderationSettingsQuery.isLoading,
+    toggleAutoModerationMutation,
   };
 }

@@ -14,6 +14,7 @@ export type AdmLogType =
   | "media_approved"
   | "media_rejected"
   | "media_deleted"
+  | "moderation_settings_updated"
   | "other";
 
 export interface InsertAdmLogParams {
