@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { MediaVideoWithSignedUrls } from "@/types/media";
 import type {
   UpdateVideoStatusParams,
+  DeleteVideoParams,
   VideoStatusAction,
   VideoTab,
   TabListState,
@@ -10,9 +11,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { VideoPreview } from "@/components/VideoPreview";
+import { VideoPlayerDialog, type PlayingVideo } from "@/components/VideoPlayerDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, X, Loader2, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { Check, X, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 function formatDate(iso: string): string {
@@ -23,9 +25,6 @@ function formatDate(iso: string): string {
   });
 }
 
-const PLACEHOLDER_THUMB =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'%3E%3Crect fill='%23e5e7eb' width='400' height='225'/%3E%3Ctext fill='%239ca3af' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='14'%3ESem capa%3C/text%3E%3C/svg%3E";
-
 export interface VideosProps {
   activeTab: VideoTab;
   setActiveTab: (tab: VideoTab) => void;
@@ -34,6 +33,7 @@ export interface VideosProps {
   approved: TabListState;
   rejected: TabListState;
   updateVideoStatusMutation: UseMutationResult<void, Error, UpdateVideoStatusParams, unknown>;
+  deleteVideoMutation: UseMutationResult<void, Error, DeleteVideoParams, unknown>;
 }
 
 type PendingAction = {
@@ -42,85 +42,28 @@ type PendingAction = {
   athleteUserId: string;
   athleteName: string;
 } | null;
-type PlayingVideo = { signedVideoUrl: string; title: string } | null;
+type PendingDelete = {
+  id: string;
+  url: string;
+  thumbUrl: string | null;
+  athleteUserId: string;
+  athleteName: string;
+  tab: VideoTab;
+  page: number;
+} | null;
 
-function VideoPreview({
-  signedThumbUrl,
-  signedVideoUrl,
-  title,
-  onPlay,
-  className,
-  size = "default",
-}: {
-  signedThumbUrl: string | null;
-  signedVideoUrl: string | null;
-  title: string | null;
-  onPlay: () => void;
-  className?: string;
-  size?: "default" | "sm";
-}) {
-  const canPlay = !!signedVideoUrl;
-  const isSm = size === "sm";
-  const hasMediaToLoad = !!(signedThumbUrl || signedVideoUrl);
-  const [mediaLoaded, setMediaLoaded] = useState(!hasMediaToLoad);
-
-  useEffect(() => {
-    setMediaLoaded(!hasMediaToLoad);
-  }, [signedThumbUrl, signedVideoUrl, hasMediaToLoad]);
-
+function AutoFlagsNotice({ video }: { video: MediaVideoWithSignedUrls }) {
+  if (video.auto_status !== "flagged" || video.auto_flags.length === 0) return null;
   return (
-    <div
-      className={`relative group ${className ?? ""}`}
-      onClick={canPlay && mediaLoaded ? onPlay : undefined}
-      onKeyDown={canPlay && mediaLoaded ? (e) => e.key === "Enter" && onPlay() : undefined}
-      role={canPlay && mediaLoaded ? "button" : undefined}
-      tabIndex={canPlay && mediaLoaded ? 0 : undefined}
-    >
-      {!signedThumbUrl && (
-        <img
-          src={PLACEHOLDER_THUMB}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          aria-hidden
-        />
-      )}
-      {signedThumbUrl ? (
-        <img
-          src={signedThumbUrl}
-          alt={title ?? "Vídeo"}
-          className="absolute inset-0 w-full h-full object-cover"
-          onLoad={() => setMediaLoaded(true)}
-        />
-      ) : signedVideoUrl ? (
-        <video
-          src={signedVideoUrl}
-          preload="auto"
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-          onLoadedData={(e) => {
-            const el = e.currentTarget;
-            el.currentTime = 0;
-            el.pause();
-            setMediaLoaded(true);
-          }}
-          aria-label={title ?? "Vídeo"}
-        />
-      ) : null}
-      <div
-        className={`absolute inset-0 flex items-center justify-center transition-opacity ${
-          !mediaLoaded ? "bg-muted" : "bg-black/30"
-        } ${canPlay && mediaLoaded ? "group-hover:bg-black/40 cursor-pointer" : ""}`}
-      >
-        {!mediaLoaded ? (
-          <Loader2 className={`animate-spin text-muted-foreground ${isSm ? "h-4 w-4" : "h-8 w-8"}`} />
-        ) : (
-          <div
-            className={`rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center ${isSm ? "p-1.5" : "p-3"} ${canPlay ? "group-hover:bg-white/40 group-hover:scale-110 transition-transform" : "opacity-80"}`}
-          >
-            <Play className={`text-foreground fill-foreground ml-0.5 ${isSm ? "h-4 w-4" : "h-8 w-8"}`} />
-          </div>
-        )}
+    <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning-foreground">
+      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-warning" />
+      <div className="space-y-0.5">
+        <p className="font-medium">Sinalizado automaticamente:</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          {video.auto_flags.map((flag) => (
+            <li key={flag.code}>{flag.message}</li>
+          ))}
+        </ul>
       </div>
     </div>
   );
@@ -172,6 +115,27 @@ function PaginationBar({
   );
 }
 
+function DeleteButton({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="text-destructive hover:bg-destructive/10"
+      onClick={onClick}
+      disabled={disabled}
+      title="Excluir vídeo"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  );
+}
+
 export function Videos({
   activeTab,
   setActiveTab,
@@ -180,9 +144,11 @@ export function Videos({
   approved,
   rejected,
   updateVideoStatusMutation,
+  deleteVideoMutation,
 }: VideosProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [playingVideo, setPlayingVideo] = useState<PlayingVideo>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
+  const [playingVideo, setPlayingVideo] = useState<PlayingVideo | null>(null);
 
   return (
     <div className="space-y-6">
@@ -241,6 +207,7 @@ export function Videos({
                           {video.athleteName} · {formatDate(video.created_at)}
                         </p>
                       </div>
+                      <AutoFlagsNotice video={video} />
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -273,6 +240,20 @@ export function Videos({
                         >
                           <X className="h-4 w-4 mr-1" /> Rejeitar
                         </Button>
+                        <DeleteButton
+                          onClick={() =>
+                            setPendingDelete({
+                              id: video.id,
+                              url: video.url,
+                              thumbUrl: video.thumb_url,
+                              athleteUserId: video.athlete_user_id,
+                              athleteName: video.athleteName,
+                              tab: "pending",
+                              page: pending.page,
+                            })
+                          }
+                          disabled={deleteVideoMutation.isPending}
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -329,7 +310,28 @@ export function Videos({
                           {video.athleteName} · {formatDate(video.created_at)}
                         </p>
                       </div>
-                      <Badge variant="default">Aprovado</Badge>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex gap-2">
+                          <Badge variant="default">Aprovado</Badge>
+                          {video.auto_status === "approved" && (
+                            <Badge variant="outline">Automático</Badge>
+                          )}
+                        </div>
+                        <DeleteButton
+                          onClick={() =>
+                            setPendingDelete({
+                              id: video.id,
+                              url: video.url,
+                              thumbUrl: video.thumb_url,
+                              athleteUserId: video.athlete_user_id,
+                              athleteName: video.athleteName,
+                              tab: "approved",
+                              page: approved.page,
+                            })
+                          }
+                          disabled={deleteVideoMutation.isPending}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -385,7 +387,23 @@ export function Videos({
                           {video.athleteName} · {formatDate(video.created_at)}
                         </p>
                       </div>
-                      <Badge variant="destructive">Rejeitado</Badge>
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="destructive">Rejeitado</Badge>
+                        <DeleteButton
+                          onClick={() =>
+                            setPendingDelete({
+                              id: video.id,
+                              url: video.url,
+                              thumbUrl: video.thumb_url,
+                              athleteUserId: video.athlete_user_id,
+                              athleteName: video.athleteName,
+                              tab: "rejected",
+                              page: rejected.page,
+                            })
+                          }
+                          disabled={deleteVideoMutation.isPending}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -403,18 +421,10 @@ export function Videos({
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!playingVideo} onOpenChange={(open) => !open && setPlayingVideo(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden">
-          {playingVideo && (
-            <video
-              src={playingVideo.signedVideoUrl}
-              controls
-              autoPlay
-              className="w-full aspect-video bg-black"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <VideoPlayerDialog
+        video={playingVideo}
+        onOpenChange={(open) => !open && setPlayingVideo(null)}
+      />
 
       <ConfirmDialog
         open={!!pendingAction}
@@ -443,6 +453,25 @@ export function Videos({
             },
             { onSuccess: () => setPendingAction(null) }
           );
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Excluir vídeo?"
+        subtitle={
+          pendingDelete
+            ? `Tem certeza que deseja excluir o vídeo de ${pendingDelete.athleteName}? Esta ação não pode ser desfeita.`
+            : ""
+        }
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={deleteVideoMutation.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          deleteVideoMutation.mutate(pendingDelete, { onSuccess: () => setPendingDelete(null) });
         }}
       />
     </div>

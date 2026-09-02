@@ -1,8 +1,11 @@
+import { useState } from "react";
 import type { Report } from "@/types/report";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VideoPreview } from "@/components/VideoPreview";
+import { VideoPlayerDialog, type PlayingVideo } from "@/components/VideoPlayerDialog";
 import { Trash2, Check, Gavel, Loader2 } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
@@ -44,19 +47,40 @@ const listEmpty = (
 function ReportCard({
   report,
   canAct,
+  onPlay,
   markReviewedMutation,
   markActionedMutation,
   deleteReportMutation,
 }: {
   report: Report;
   canAct: boolean;
+  onPlay: (video: PlayingVideo) => void;
   markReviewedMutation: ReportsProps["markReviewedMutation"];
   markActionedMutation: ReportsProps["markActionedMutation"];
   deleteReportMutation: ReportsProps["deleteReportMutation"];
 }) {
+  const canPlay = !!report.mediaSignedVideoUrl;
   return (
     <Card className="border-border/50">
-      <CardContent className="flex items-center justify-between p-5">
+      <CardContent className="flex items-center justify-between p-5 gap-4">
+        {canPlay && (
+          <div className="w-24 h-16 shrink-0 rounded-md overflow-hidden bg-muted relative">
+            <VideoPreview
+              signedThumbUrl={report.mediaSignedThumbUrl}
+              signedVideoUrl={report.mediaSignedVideoUrl}
+              title={report.mediaTitle}
+              size="sm"
+              onPlay={() =>
+                report.mediaSignedVideoUrl &&
+                onPlay({
+                  signedVideoUrl: report.mediaSignedVideoUrl,
+                  title: report.mediaTitle ?? "Vídeo denunciado",
+                })
+              }
+              className="w-full h-full"
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-1.5 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs font-medium">
@@ -128,6 +152,8 @@ export function Reports({
   markActionedMutation,
   deleteReportMutation,
 }: ReportsProps) {
+  const [playingVideo, setPlayingVideo] = useState<PlayingVideo | null>(null);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -157,6 +183,7 @@ export function Reports({
             key={report.id}
             report={report}
             canAct={canAct}
+            onPlay={setPlayingVideo}
             markReviewedMutation={markReviewedMutation}
             markActionedMutation={markActionedMutation}
             deleteReportMutation={deleteReportMutation}
@@ -193,6 +220,8 @@ export function Reports({
         <TabsContent value="revisadas">{renderTab(reportsReviewed, true)}</TabsContent>
         <TabsContent value="acionadas">{renderTab(reportsActioned, true)}</TabsContent>
       </Tabs>
+
+      <VideoPlayerDialog video={playingVideo} onOpenChange={(open) => !open && setPlayingVideo(null)} />
     </div>
   );
 }

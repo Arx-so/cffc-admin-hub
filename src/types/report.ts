@@ -28,5 +28,8 @@ export interface Report {
   reportedBy: string;
   hasMedia: boolean;
   mediaTitle: string | null;
+  /** Only set when the reported media is a video, so the admin can watch it before judging the report */
+  mediaSignedVideoUrl: string | null;
+  mediaSignedThumbUrl: string | null;
   createdAt: string;
 }

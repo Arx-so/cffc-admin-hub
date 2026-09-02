@@ -2,6 +2,14 @@ export type MediaType = "document" | "image" | "video";
 
 export type MediaStatus = "pending" | "approved" | "rejected";
 
+/** Result of the script-based auto-moderation check. null = not yet checked. */
+export type MediaAutoStatus = "approved" | "flagged" | null;
+
+export interface MediaAutoFlag {
+  code: string;
+  message: string;
+}
+
 export interface Media {
   id: string;
   athlete_user_id: string;
@@ -13,6 +21,8 @@ export interface Media {
   status: MediaStatus;
   link: string | null;
   created_at: string;
+  auto_status: MediaAutoStatus;
+  auto_flags: MediaAutoFlag[];
 }
 
 /** Row from Supabase with profile join (profile.name from athlete_user_id) */
@@ -27,6 +37,8 @@ export interface MediaRowWithProfile {
   status: MediaStatus;
   link: string | null;
   created_at: string;
+  auto_status: MediaAutoStatus;
+  auto_flags: MediaAutoFlag[];
   profile: { name: string | null } | null;
 }
 
@@ -38,6 +50,11 @@ export interface MediaVideoWithSignedUrls {
   status: MediaStatus;
   created_at: string;
   athleteName: string;
+  /** Raw storage paths (needed to delete the underlying files) */
+  url: string;
+  thumb_url: string | null;
   signedThumbUrl: string | null;
   signedVideoUrl: string | null;
+  auto_status: MediaAutoStatus;
+  auto_flags: MediaAutoFlag[];
 }

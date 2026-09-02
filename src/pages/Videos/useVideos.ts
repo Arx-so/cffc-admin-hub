@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchVideoMediaByStatus,
   updateMediaStatus,
+  deleteMedia,
   type FetchVideoMediaResult,
 } from "@/processes/media";
 import { insertAdmLog } from "@/processes/admLogs";
@@ -16,6 +17,15 @@ const PAGE_SIZE = 20;
 export type VideoTab = "pending" | "approved" | "rejected";
 
 export type VideoStatusAction = "aprovado" | "rejeitado";
+
+export interface DeleteVideoParams {
+  id: string;
+  url: string;
+  thumbUrl: string | null;
+  athleteUserId: string;
+  tab: VideoTab;
+  page: number;
+}
 
 export interface UpdateVideoStatusParams {
   id: string;
@@ -162,6 +172,37 @@ export function useVideos() {
     },
   });
 
+  const deleteVideoMutation = useMutation({
+    mutationFn: async (params: DeleteVideoParams) => {
+      await deleteMedia({ id: params.id, url: params.url, thumbUrl: params.thumbUrl });
+      return params;
+    },
+    onSuccess: ({ id, tab, page, athleteUserId }) => {
+      queryClient.setQueryData<FetchVideoMediaResult>(
+        queryKeys.videos.listByStatus(tab, page, PAGE_SIZE),
+        (old) => {
+          if (!old) return old;
+          return {
+            items: old.items.filter((v) => v.id !== id),
+            totalCount: Math.max(0, old.totalCount - 1),
+          };
+        }
+      );
+      if (admId) {
+        insertAdmLog({
+          admId,
+          userId: athleteUserId,
+          type: "media_deleted",
+          metadata: { mediaId: id },
+        });
+      }
+      toast({ title: "Vídeo excluído" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao excluir vídeo", description: err.message, variant: "destructive" });
+    },
+  });
+
   return {
     activeTab,
     setActiveTab,
@@ -170,5 +211,6 @@ export function useVideos() {
     approved,
     rejected,
     updateVideoStatusMutation,
+    deleteVideoMutation,
   };
 }

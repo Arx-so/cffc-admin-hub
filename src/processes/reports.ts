@@ -1,7 +1,14 @@
 import { supabase } from "@/lib/supabase";
+import { createSignedMediaUrls } from "@/processes/media";
 import type { Report, ReportRow, ReportStatus } from "@/types/report";
 
 const TABLE = "content_report";
+
+interface ReportedMediaInfo {
+  title: string | null;
+  signedVideoUrl: string | null;
+  signedThumbUrl: string | null;
+}
 
 async function fetchReportRows(status?: ReportStatus): Promise<ReportRow[]> {
   let q = supabase.from(TABLE).select("*").order("created_at", { ascending: false });
@@ -17,10 +24,19 @@ async function fetchProfileNames(ids: string[]): Promise<Map<string, string>> {
   return new Map((data ?? []).map((p) => [p.id, p.name ?? "—"]));
 }
 
-async function fetchMediaTitles(ids: string[]): Promise<Map<string, string | null>> {
+async function fetchReportedMedia(ids: string[]): Promise<Map<string, ReportedMediaInfo>> {
   if (!ids.length) return new Map();
-  const { data } = await supabase.from("media").select("id, title").in("id", ids);
-  return new Map((data ?? []).map((m) => [m.id, m.title]));
+  const { data } = await supabase.from("media").select("id, title, type, url, thumb_url").in("id", ids);
+  const result = new Map<string, ReportedMediaInfo>();
+  for (const m of data ?? []) {
+    // Only videos get a signed playback URL - other media types aren't playable here.
+    const { signedVideoUrl, signedThumbUrl } =
+      m.type === "video"
+        ? await createSignedMediaUrls(m.url, m.thumb_url)
+        : { signedVideoUrl: null, signedThumbUrl: null };
+    result.set(m.id, { title: m.title, signedVideoUrl, signedThumbUrl });
+  }
+  return result;
 }
 
 async function mapRowsToReports(rows: ReportRow[]): Promise<Report[]> {
@@ -33,23 +49,28 @@ async function mapRowsToReports(rows: ReportRow[]): Promise<Report[]> {
     ...new Set(rows.map((r) => r.media_id).filter((id): id is string => id !== null)),
   ];
 
-  const [nameById, mediaTitleById] = await Promise.all([
+  const [nameById, mediaById] = await Promise.all([
     fetchProfileNames(profileIds),
-    fetchMediaTitles(mediaIds),
+    fetchReportedMedia(mediaIds),
   ]);
 
-  return rows.map((r) => ({
-    id: r.id,
-    reason: r.reason,
-    details: r.details,
-    status: r.status,
-    reportedUser: nameById.get(r.reported_user_id) ?? "—",
-    reportedUserId: r.reported_user_id,
-    reportedBy: nameById.get(r.reporter_id) ?? "—",
-    hasMedia: r.media_id !== null,
-    mediaTitle: r.media_id ? mediaTitleById.get(r.media_id) ?? null : null,
-    createdAt: formatDate(r.created_at),
-  }));
+  return rows.map((r) => {
+    const media = r.media_id ? mediaById.get(r.media_id) : undefined;
+    return {
+      id: r.id,
+      reason: r.reason,
+      details: r.details,
+      status: r.status,
+      reportedUser: nameById.get(r.reported_user_id) ?? "—",
+      reportedUserId: r.reported_user_id,
+      reportedBy: nameById.get(r.reporter_id) ?? "—",
+      hasMedia: r.media_id !== null,
+      mediaTitle: media?.title ?? null,
+      mediaSignedVideoUrl: media?.signedVideoUrl ?? null,
+      mediaSignedThumbUrl: media?.signedThumbUrl ?? null,
+      createdAt: formatDate(r.created_at),
+    };
+  });
 }
 
 export async function fetchReports(): Promise<Report[]> {
